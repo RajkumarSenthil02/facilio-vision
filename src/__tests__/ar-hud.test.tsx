@@ -1,63 +1,148 @@
-// Design-system smoke for the Dock HUD stage: zones render, markers carry
-// live WO-derived status, minimize ⇄ restore works, AR toggle empties zone D.
-import { render, screen } from '@testing-library/react';
+// Design-system smoke for the Dock HUD stage, now over the REAL camera:
+// the zones render, the AR toggle is the gesture that starts the camera and
+// the motion sensors, and the marker board minimizes/restores (persisted).
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
+import type { Survey } from '../api/types';
+
+const scanBus = vi.hoisted(() => ({ emit: null as ((code: string) => void) | null }));
+vi.mock('../vision/scanLoop', async () => {
+  const React = await import('react');
+  return {
+    useScanLoop: () => {
+      const [qrHit, setQrHit] = React.useState<{ code: string; at: number } | null>(null);
+      React.useEffect(() => {
+        scanBus.emit = (code: string) => setQrHit({ code, at: Date.now() });
+        return () => {
+          scanBus.emit = null;
+        };
+      }, []);
+      return {
+        candidates: [],
+        locked: null,
+        qrHit,
+        hint: null,
+        stats: { ticks: 0, embeds: 0, embedMs: 0, embedIntervalMs: 500, indexSize: 0 },
+      };
+    },
+  };
+});
+
+const SURVEY: Survey = {
+  id: 'sv-hud',
+  name: 'WS-01',
+  spaceName: 'Open Office 3F',
+  geo: null,
+  qrCode: 'ws-01-code',
+  sweep: [{ heading: 0, pitch: 0, vec: { q: '', s: 1, dim: 0 } }],
+  markers: [
+    { id: 'm1', label: 'AHU-03', heading: 10, pitch: 0, assetId: 3001 },
+    { id: 'm2', label: 'Belt slipping — check on next PM', heading: 40, pitch: -3, note: 'x' },
+  ],
+  modelId: 'luma64-v0',
+  createdAt: '2026-08-01T00:00:00.000Z',
+};
+
+function seed() {
+  localStorage.setItem(`fv.mockKv.surveys.survey.${SURVEY.id}`, JSON.stringify(SURVEY));
+  localStorage.setItem(
+    `fv.mockKv.codes.${SURVEY.qrCode}`,
+    JSON.stringify({ code: SURVEY.qrCode, type: 'survey', surveyId: SURVEY.id, createdAt: SURVEY.createdAt }),
+  );
+}
 
 function bootAt(query: string) {
   window.history.replaceState({}, '', `/${query}`);
   return render(<App />);
 }
 
+afterEach(() => {
+  delete (globalThis as { DeviceOrientationEvent?: unknown }).DeviceOrientationEvent;
+});
+
 describe('AR HUD (mock mode)', () => {
-  it('renders topbar zones, markers with WO counts, candidates and dock', async () => {
-    bootAt('?mock=1&tab=ar');
+  it('renders the topbar zones, the crosshair and the dock', async () => {
+    const { container } = bootAt('?mock=1&tab=ar');
 
-    // Zone A/B/C bar
+    // Zone A: site context chip
     expect(await screen.findByText('All sites')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'AR on' })).toBeInTheDocument();
-
-    // Zone D markers from fixtures: AHU-03 has one open WO → red edge + count
-    const tag = await screen.findByRole('button', { name: /HVAC · Open Office 3F/ });
-    expect(tag).toHaveClass('ar-asset-tag');
-    // Several fixture assets carry one open WO each — assert at least one count chip
-    expect((await screen.findAllByText('1 open')).length).toBeGreaterThan(0);
-
-    // Marker family co-exists
-    expect(screen.getByText('Belt slipping — check on next PM')).toBeInTheDocument();
-    expect(screen.getByText('WS-01')).toBeInTheDocument();
-
-    // Zone F dock with marker count badge
-    expect(screen.getByRole('button', { name: /Markers/ })).toBeInTheDocument();
-  });
-
-  it('select → minimize → restore an asset tag', async () => {
-    const user = userEvent.setup();
-    bootAt('?mock=1&tab=ar');
-
-    const tag = await screen.findByRole('button', { name: /HVAC · Open Office 3F/ });
-    await user.click(tag); // select
-    expect(tag).toHaveClass('selected');
-
-    await user.click(tag); // second tap minimizes
-    const dot = await screen.findByRole('button', { name: 'Restore AHU-03' });
-    expect(dot).toHaveClass('ar-min-dot');
-
-    await user.click(dot); // restore
-    expect(await screen.findByRole('button', { name: /HVAC · Open Office 3F/ })).toHaveClass('ar-asset-tag');
-  });
-
-  it('AR toggle clears zone D but keeps the shell', async () => {
-    const user = userEvent.setup();
-    bootAt('?mock=1&tab=ar');
-
-    await screen.findByRole('button', { name: /HVAC · Open Office 3F/ });
-    await user.click(screen.getByRole('button', { name: 'AR on' }));
-
-    expect(screen.queryByRole('button', { name: /HVAC · Open Office 3F/ })).not.toBeInTheDocument();
+    // Zone B: exactly ONE state chip
+    expect(container.querySelectorAll('.ar-state')).toHaveLength(1);
+    expect(screen.getByText('AR paused')).toBeInTheDocument();
+    // Zone C: the AR toggle
     expect(screen.getByRole('button', { name: 'AR off' })).toBeInTheDocument();
-    // Tab bar still there — the stage never owns the app chrome
+    // Zone D + F
+    expect(container.querySelector('.ar-crosshair')).not.toBeNull();
+    expect(screen.getByRole('button', { name: /Markers/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Raise fault/ })).toBeInTheDocument();
+    // the camera only starts on the gesture — no feed surface yet
+    expect(container.querySelector('.fv-cam')).toBeNull();
+  });
+
+  it('the AR toggle is the user gesture that starts the camera AND the sensors', async () => {
+    const requestPermission = vi.fn(async () => 'granted');
+    (globalThis as { DeviceOrientationEvent?: unknown }).DeviceOrientationEvent = {
+      requestPermission,
+    };
+    const user = userEvent.setup();
+    const { container } = bootAt('?mock=1&tab=ar');
+
+    await user.click(await screen.findByRole('button', { name: 'AR off' }));
+
+    expect(screen.getByRole('button', { name: 'AR on' })).toBeInTheDocument();
+    // iOS motion gate asked inside the click
+    expect(requestPermission).toHaveBeenCalledTimes(1);
+    // camera surface mounted INSIDE the stage, with its own unavailable state
+    const stage = container.querySelector('.ar-stage') as HTMLElement;
+    await waitFor(() => expect(stage.querySelector('.fv-cam')).not.toBeNull());
+    expect(within(stage).getByText(/Camera unavailable here/)).toBeInTheDocument();
+    // the app chrome is never owned by the stage
     expect(screen.getByRole('tab', { name: 'Surveys' })).toBeInTheDocument();
+
+    // turning AR back off tears the feed down again
+    await user.click(screen.getByRole('button', { name: 'AR on' }));
+    expect(container.querySelector('.fv-cam')).toBeNull();
+    expect(screen.getByText('AR paused')).toBeInTheDocument();
+  });
+
+  it('markers appear once localized, and the board minimizes ⇄ restores (persisted)', async () => {
+    seed();
+    const user = userEvent.setup();
+    bootAt('?mock=1&tab=ar');
+
+    await user.click(await screen.findByRole('button', { name: 'AR off' }));
+    await act(async () => {
+      scanBus.emit?.('ws-01-code');
+    });
+
+    // Zone D: the survey's markers, asset tag + note tag
+    const tag = await screen.findByRole('button', { name: /AHU-03/ });
+    expect(tag).toHaveClass('ar-asset-tag');
+    // the note marker renders as a note tag (and, off-view, as an edge chevron)
+    expect(
+      screen.getByText('Belt slipping — check on next PM', { selector: '.txt' }),
+    ).toBeInTheDocument();
+    // dock badge counts them
+    expect(screen.getByRole('button', { name: /Markers/ })).toHaveTextContent('2');
+
+    // minimize from the marker index
+    await user.click(screen.getByRole('button', { name: /Markers/ }));
+    await user.click(await screen.findByRole('button', { name: 'Minimize marker board' }));
+    expect(screen.queryByRole('button', { name: /AHU-03/ })).not.toBeInTheDocument();
+
+    const restore = await screen.findByRole('button', { name: /Restore markers \(2\)/ });
+    expect(restore).toHaveClass('ar-board-restore');
+    await waitFor(() =>
+      expect(localStorage.getItem('fv.mockKv.settings.board.none')).toBe('{"minimized":true}'),
+    );
+
+    // restore
+    await user.click(restore);
+    expect(await screen.findByRole('button', { name: /AHU-03/ })).toHaveClass('ar-asset-tag');
+    await waitFor(() =>
+      expect(localStorage.getItem('fv.mockKv.settings.board.none')).toBe('{"minimized":false}'),
+    );
   });
 });

@@ -22,8 +22,8 @@ describe('shell-smoke', () => {
     expect(screen.queryByRole('tab', { name: 'Diagnostics' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Boom' })).not.toBeInTheDocument();
 
-    // Default tab renders the AR stage
-    expect(await screen.findByText('Preview — camera lands in Phase 3')).toBeInTheDocument();
+    // Default tab renders the AR stage (camera + AR start on the toggle gesture)
+    expect(await screen.findByRole('button', { name: 'AR off' })).toBeInTheDocument();
   });
 
   it('switches tabs and rewrites only the tab param', async () => {
@@ -37,8 +37,10 @@ describe('shell-smoke', () => {
     expect(params.get('tab')).toBe('surveys');
     expect(params.get('mock')).toBe('1'); // preserved
 
-    // Mock fixtures flow through the seam into the screen
-    expect(await screen.findByText('Greenfield Business Park')).toBeInTheDocument();
+    // The surveys registry offers its authoring entry point
+    expect(
+      await screen.findByRole('button', { name: 'Place assets (AR survey)' }),
+    ).toBeInTheDocument();
   });
 
   it('hidden screens join the bar when active via ?tab=', async () => {

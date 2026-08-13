@@ -2,10 +2,10 @@
 // Surveys tab. Setup → guided 360° sweep → optional standpoint-QR enrolment
 // → crosshair marker placement → save to appStore KV 'surveys'.
 //
-// Camera note: the live camera pipeline belongs to src/vision (parallel
-// workstream). Until the integrator wires setSweepFrameSource(), sweep
-// frames fall back to the deterministic synthetic embedding — the survey
-// geometry (headings, markers, Δ math) is real either way.
+// Camera: the live feed comes from src/components/camera (WS-A). Sweep frames
+// are embedded off that feed; with no camera (desktop/?mock=1) they fall back
+// to the deterministic synthetic embedding — the survey geometry (headings,
+// markers, Δ math) is real either way.
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { appStore } from '../api/appStore';
@@ -17,6 +17,11 @@ import { ArCard, ArSpace } from '../ar/ArSpace';
 import { AssetTag, NoteTag } from '../ar/markers';
 import DsSelect from '../components/DsSelect';
 import LocationPicker from '../components/LocationPicker';
+import { CameraView } from '../components/camera/CameraView';
+import { useCamera } from '../components/camera/useCamera';
+import { getCodeEntry, linkCode, unlinkCode } from '../vision/codes';
+import { useScanLoop } from '../vision/scanLoop';
+import { normalizeCode } from '../vision/qr';
 import { useGeoFix } from '../hooks/useGeoFix';
 import { arOrientation, enableArOrientation, useHeading } from '../hooks/useHeading';
 import { wrap } from '../wayfinding/bearing';
@@ -24,7 +29,7 @@ import { useLocationScope } from '../state/LocationContext';
 import '../styles/ar.css';
 import '../ar/arspace.css';
 
-/** Integrator seam: the camera module registers a live-frame getter here. */
+/** Test/integration seam: overrides the camera as the sweep-frame source. */
 let sweepFrameSource: (() => CanvasImageSource | null) | null = null;
 export function setSweepFrameSource(fn: (() => CanvasImageSource | null) | null): void {
   sweepFrameSource = fn;
@@ -75,6 +80,15 @@ export default function PlaceAssetsScreen({
   const [markerForm, setMarkerForm] = useState<MarkerDraft | null>(null);
   const busyRef = useRef(false);
 
+  // The live feed runs from the sweep step onward (setup is a plain form).
+  const camera = useCamera(step === 'sweep' || step === 'qr' || step === 'markers');
+  const cameraFrame = (): CanvasImageSource | null => {
+    const fc = camera.frameCanvasRef.current;
+    if (fc && fc.width) return fc;
+    const video = camera.videoRef.current;
+    return video && video.readyState >= 2 && video.videoWidth ? video : null;
+  };
+
   useEffect(() => {
     if (!hint) return;
     const t = setTimeout(() => setHint(null), 3600);
@@ -96,7 +110,7 @@ export default function PlaceAssetsScreen({
     if (busyRef.current) return;
     busyRef.current = true;
     try {
-      const src = sweepFrameSource?.() ?? null;
+      const src = sweepFrameSource?.() ?? cameraFrame();
       const vec = src ? await getEmbedFn()(src) : syntheticVec(heading);
       setFrames((prev) =>
         prev.length >= MAX_FRAMES ? prev : [...prev, { heading, pitch, vec }],
@@ -119,12 +133,24 @@ export default function PlaceAssetsScreen({
 
   const sweepDone = frames.length >= minFrames();
 
+  // Standpoint step: a sticker held up to the camera enrolls itself.
+  const scan = useScanLoop({ camera, siteId: scope.siteId, enabled: step === 'qr' });
+  const lastScanAt = useRef(0);
+  useEffect(() => {
+    if (step !== 'qr' || !scan.qrHit || scan.qrHit.at === lastScanAt.current) return;
+    lastScanAt.current = scan.qrHit.at;
+    setCodeInput(scan.qrHit.code);
+    void enrollCode(scan.qrHit.code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scan.qrHit, step]);
+
   const enrollCode = async (raw: string) => {
-    const code = raw.trim();
+    const code = normalizeCode(raw);
     if (!code) return;
-    // A code identifies exactly ONE thing — check the app-wide registry and
-    // never guess when it already points elsewhere.
-    const entry = await appStore.kvGet<CodeEntry>('codes', `code.${code}`);
+    // A code identifies exactly ONE thing — check the app-wide registry
+    // (src/vision/codes, same keys the scanner reads) and never guess when it
+    // already points elsewhere.
+    const entry = await getCodeEntry(code);
     if (entry) {
       setConflict({ code, entry });
       return;
@@ -155,7 +181,7 @@ export default function PlaceAssetsScreen({
         });
       }
     }
-    await appStore.kvDelete('codes', `code.${code}`);
+    await unlinkCode(code);
     acceptCode(code);
   };
 
@@ -207,15 +233,7 @@ export default function PlaceAssetsScreen({
         createdAt: new Date().toISOString(),
       };
       await appStore.kvPut('surveys', `survey.${id}`, survey);
-      if (qrCode) {
-        const entry: CodeEntry = {
-          code: qrCode,
-          type: 'survey',
-          surveyId: id,
-          createdAt: survey.createdAt,
-        };
-        await appStore.kvPut('codes', `code.${qrCode}`, entry);
-      }
+      if (qrCode) await linkCode(qrCode, { type: 'survey', surveyId: id });
       await queryClient.invalidateQueries({ queryKey: ['surveys'] });
       onSaved?.(id);
       onClose();
@@ -240,8 +258,17 @@ export default function PlaceAssetsScreen({
       </div>
 
       <div className="pa-body">
-        {/* Camera mount — src/vision replaces the dark backdrop (see setSweepFrameSource). */}
-        <div id="pa-camera-slot" className="ar-camera-slot" />
+        {/* Camera mount — the live feed is the backdrop from the sweep on. */}
+        <div id="pa-camera-slot" className="ar-camera-slot">
+          {step !== 'setup' && (
+            <CameraView
+              videoRef={camera.videoRef}
+              frameCanvasRef={camera.frameCanvasRef}
+              state={camera.state}
+              onResume={() => void camera.resume()}
+            />
+          )}
+        </div>
 
         {step === 'setup' && (
           <div className="pa-sheet">
@@ -313,8 +340,8 @@ export default function PlaceAssetsScreen({
             <h3>Standpoint QR (optional)</h3>
             <p className="muted small">
               Stick a label at this spot and enroll it while FACING it — scanning it later opens
-              this survey instantly with an exact heading correction. Camera scanning arrives with
-              the vision module; type the label's code for now.
+              this survey instantly with an exact heading correction. Hold the label up to the
+              camera, or type its code.
             </p>
             <div className="ar-code-row">
               <input

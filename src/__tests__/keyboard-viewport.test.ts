@@ -43,14 +43,14 @@ describe('keyboard-aware viewport', () => {
     installViewportHeight();
 
     const root = document.documentElement;
-    expect(root.style.getPropertyValue('--app-h')).toBe('844px');
+    expect(root.style.getPropertyValue('--app-h-px')).toBe('844px');
     expect(root.classList.contains('kb-open')).toBe(false);
 
     // a shrunken visual viewport with NOTHING focused = iOS collapsed the
     // Safari toolbar without telling us — trust the larger measurement, or
     // the dock floats above a dead band (the shipped bug)
     vv.set(508);
-    expect(root.style.getPropertyValue('--app-h')).toBe('844px');
+    expect(root.style.getPropertyValue('--app-h-px')).toBe('844px');
     expect(root.classList.contains('kb-open')).toBe(false);
 
     // the SAME gap while typing IS the keyboard
@@ -58,7 +58,7 @@ describe('keyboard-aware viewport', () => {
     document.body.appendChild(input);
     input.focus();
     vv.set(508);
-    expect(root.style.getPropertyValue('--app-h')).toBe('508px');
+    expect(root.style.getPropertyValue('--app-h-px')).toBe('508px');
     expect(root.classList.contains('kb-open')).toBe(true);
 
     input.blur();

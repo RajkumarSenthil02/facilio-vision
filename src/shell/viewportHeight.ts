@@ -32,7 +32,13 @@ export function installViewportHeight(): void {
     const editing = !!document.activeElement?.matches?.('input, textarea, [contenteditable]');
     const keyboard = editing && window.innerHeight - vvH > KEYBOARD_MIN_PX;
     const h = keyboard ? vvH : Math.max(vvH, window.innerHeight);
-    if (h > 0) document.documentElement.style.setProperty('--app-h', `${Math.round(h)}px`);
+    // JS writes the MEASUREMENT; CSS derives --app-h as max(100dvh, this).
+    // The engine's dvh is definitionally right across browser-chrome states
+    // (including in-app webviews whose collapsing bars misreport through
+    // BOTH JS APIs); the measurement exists to raise the floor where dvh
+    // itself comes up short (the iPad shell), and to carry the keyboard
+    // height, where the smaller value must win (html.kb-open flips to it).
+    if (h > 0) document.documentElement.style.setProperty('--app-h-px', `${Math.round(h)}px`);
     document.documentElement.style.setProperty('--vv-top', `${Math.round(vv?.offsetTop ?? 0)}px`);
     document.documentElement.classList.toggle('kb-open', keyboard);
   };

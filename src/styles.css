@@ -26,14 +26,18 @@
    it feel native instead of like a web page in a browser.
    --------------------------------------------------------------------------- */
 :root {
-  --app-h: 100vh; /* fallback for old engines */
+  /* --app-h-px is the JS measurement (src/shell/viewportHeight). The engine's
+     dynamic viewport is the baseline truth; the measurement only RAISES it
+     (iPad shell under-report) — except under the keyboard, where the smaller
+     measured height must win (see html.kb-open below). */
+  --app-h: max(100vh, var(--app-h-px, 0px)); /* fallback for old engines */
   --nav-h: 56px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
 }
 
 @supports (height: 100dvh) {
-  :root { --app-h: 100dvh; }
+  :root { --app-h: max(100dvh, var(--app-h-px, 0px)); }
 }
 
 html, body, #root {
@@ -110,6 +114,7 @@ button:hover { border-color: var(--muted); }
 /* ---- keyboard (set by src/shell/viewportHeight.ts) ----
    While typing, the tab dock is dead weight: hiding it hands its 56px to the
    form above the keys, instead of letting it ride up over the content. */
+html.kb-open { --app-h: var(--app-h-px, 100vh); }
 html.kb-open .as-dock { display: none; }
 html.kb-open .pa-stage { height: var(--app-h); }
 /* If iOS pans the page to reveal a focused input, glue the app back to the

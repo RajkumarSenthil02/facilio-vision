@@ -1,0 +1,7 @@
+{
+  "name": "Facilio Vision",
+  "app": "facilio-vision",
+  "build": {
+    "publish": "dist"
+  }
+}

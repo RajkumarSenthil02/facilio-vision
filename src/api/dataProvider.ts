@@ -51,6 +51,8 @@ export interface DataProvider {
   getWorkOrder(id: number): Promise<WorkOrder | null>;
   listWorkOrderTasks(workOrderId: number): Promise<WorkOrderTask[]>;
   setWorkOrderTaskStatus(workOrderId: number, taskId: number, closed: boolean): Promise<void>;
+  /** Append a checklist task to a work order; resolves the new task id. */
+  addWorkOrderTask(workOrderId: number, subject: string): Promise<number>;
   /** The status catalogue — workorder.moduleState allowed_values from metadata. */
   getWorkOrderStatuses(): Promise<WorkOrderStatus[]>;
   /** Execute a transition through the status action; `status` is the internal name. */

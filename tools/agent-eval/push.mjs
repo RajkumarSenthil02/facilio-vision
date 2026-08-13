@@ -25,6 +25,7 @@ export const AGENT_FILES = {
   'fv-identify': { txt: 'agents/identify.txt', schema: 'agents/identify.schema.json' },
   'fv-wo-draft': { txt: 'agents/wo-draft.txt', schema: 'agents/wo-draft.schema.json' },
   'fv-nameplate': { txt: 'agents/nameplate.txt', schema: 'agents/nameplate.schema.json' },
+  'fv-tasks': { txt: 'agents/tasks.txt', schema: 'agents/tasks.schema.json' },
   // fv-voice must stay schema-less: its protocol is "JSON tool call OR a plain
   // spoken sentence", and a structured-output schema would force JSON always.
   'fv-voice': { txt: 'agents/voice.txt', schema: null },

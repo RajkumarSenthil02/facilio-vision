@@ -182,6 +182,14 @@ export const mockProvider: DataProvider = {
     return delay([...(tasksByWo.get(workOrderId) ?? [])]);
   },
 
+  async addWorkOrderTask(workOrderId: number, subject: string) {
+    const list = tasksByWo.get(workOrderId) ?? [];
+    const id = 9000 + list.length + Math.floor(Math.random() * 100);
+    list.push({ id, subject, closed: false });
+    tasksByWo.set(workOrderId, list);
+    return delay(id);
+  },
+
   async setWorkOrderTaskStatus(workOrderId: number, taskId: number, closed: boolean) {
     const task = tasksByWo.get(workOrderId)?.find((t) => t.id === taskId);
     if (!task) throw new Error(`Task ${taskId} not found on WO ${workOrderId}`);

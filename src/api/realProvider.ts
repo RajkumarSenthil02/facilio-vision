@@ -315,6 +315,18 @@ export const realProvider: DataProvider = {
     return rowsOf<RawTask>(res.data).map(toTask);
   },
 
+  async addWorkOrderTask(workOrderId: number, subject: string): Promise<number> {
+    // Same script lane as work orders (see scriptFns.ts): the V3 task module,
+    // parented to its ticket. create-work-order-task has the same broken
+    // schema family as create-work-order, so it is not used.
+    const out = (await callFn('createRecord', [
+      'task',
+      { subject, parentTicketId: workOrderId },
+    ])) as { id?: number } | null;
+    if (!out?.id) throw new Error('Task create returned no id — script lane failed');
+    return out.id;
+  },
+
   async setWorkOrderTaskStatus(workOrderId: number, taskId: number, closed: boolean) {
     await cmms('complete-or-reopen-work-order-task', {
       work_order_id: workOrderId,

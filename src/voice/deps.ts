@@ -9,7 +9,7 @@
  */
 import { provider } from '../api/provider';
 import { appStore } from '../api/appStore';
-import { loadGraph, nodeForSurvey, withSurveyNodes } from '../wayfinding/graph';
+import { loadGraph, nodeForSurvey, withSurveyNodes, type WayGraph } from '../wayfinding/graph';
 import { findRoute } from '../wayfinding/router';
 import {
   draftWorkOrder,
@@ -21,12 +21,24 @@ import {
 import type {
   Asset,
   AssetSearch,
+  Building,
+  Floor,
+  Site,
+  Space,
   WorkOrder,
   WorkOrderDraft,
   WorkOrderStatus,
   WorkOrderTask,
   Survey,
 } from '../api/types';
+
+/** One row of the portfolio hierarchy, typed for the find_location tool. */
+export interface LocationHit {
+  kind: 'site' | 'building' | 'floor' | 'space';
+  id: number;
+  name: string;
+  parent?: string;
+}
 
 export interface VoiceDeps {
   searchAssets(search?: AssetSearch): Promise<Asset[]>;
@@ -46,6 +58,17 @@ export interface VoiceDeps {
   listOpenWorkOrders(): Promise<WorkOrder[]>;
   /** Resolves an asset to a route destination; null when it is not mapped. */
   routeToAsset(assetId: number): Promise<{ destination: string; steps: string[] } | null>;
+  /** Search the whole location hierarchy by name (or bare id). */
+  findLocations(text: string): Promise<LocationHit[]>;
+  /** Route to a PLACE (building/floor/space) via the wayfinder graph. */
+  routeToPlace(hit: {
+    kind: 'site' | 'building' | 'floor' | 'space';
+    id: number;
+  }): Promise<{ destination: string; steps: string[] } | null>;
+  /** One work order by id — status checks and task adds start here. */
+  getWorkOrder(id: number): Promise<WorkOrder | null>;
+  /** Append a checklist task; resolves the new task id. */
+  addWorkOrderTask(workOrderId: number, subject: string): Promise<number>;
   voiceTurn(input: string): Promise<string>;
   speak(text: string): void;
 }
@@ -101,4 +124,65 @@ export const defaultDeps: VoiceDeps = {
   identifyAsset,
   voiceTurn,
   speak,
+  getWorkOrder: (id) => provider.getWorkOrder(id),
+  addWorkOrderTask: (workOrderId, subject) => provider.addWorkOrderTask(workOrderId, subject),
+  findLocations: async (text) => {
+    const q = text.trim().toLowerCase();
+    if (!q) return [];
+    const [sitesPage, buildings, floors, spaces] = await Promise.all([
+      provider.listSites({ pageSize: 100 }).catch(() => ({ data: [] as Site[] })),
+      provider.listBuildings().catch(() => [] as Building[]),
+      provider.listFloors().catch(() => [] as Floor[]),
+      provider.listAllSpaces().catch(() => [] as Space[]),
+    ]);
+    const sites = sitesPage.data;
+    const idAsked = /^\d+$/.test(q) ? Number(q) : undefined;
+    const hits: LocationHit[] = [];
+    const match = (name: string, id: number) =>
+      (idAsked !== undefined && id === idAsked) || name.toLowerCase().includes(q);
+    for (const s of sites) if (match(s.name, s.id)) hits.push({ kind: 'site', id: s.id, name: s.name });
+    for (const b of buildings)
+      if (match(b.name, b.id))
+        hits.push({
+          kind: 'building',
+          id: b.id,
+          name: b.name,
+          parent: sites.find((s) => s.id === b.siteId)?.name,
+        });
+    for (const f of floors)
+      if (match(f.name, f.id))
+        hits.push({
+          kind: 'floor',
+          id: f.id,
+          name: f.name,
+          parent: buildings.find((b) => b.id === f.buildingId)?.name,
+        });
+    for (const sp of spaces)
+      if (match(sp.name, sp.id)) hits.push({ kind: 'space', id: sp.id, name: sp.name });
+    return hits.slice(0, 8);
+  },
+  routeToPlace: async (hit) => {
+    // A place routes like an asset does: find a survey standpoint that lives
+    // in it, then let the router walk the graph. No standpoint = unmapped,
+    // said plainly — inventing corridors would be worse than declining.
+    const surveys = (await appStore.kvList<Survey>('surveys', 'survey.', 200))
+      .map((r) => r.value)
+      .filter((s) => s && Array.isArray(s.markers));
+    const inPlace = surveys.find((s) =>
+      hit.kind === 'building'
+        ? s.buildingId === hit.id
+        : hit.kind === 'floor'
+          ? s.floorId === hit.id
+          : hit.kind === 'site'
+            ? s.siteId === hit.id
+            : false,
+    );
+    if (!inPlace?.siteId) return null;
+    const graph: WayGraph = withSurveyNodes(await loadGraph(inPlace.siteId), surveys);
+    const destination = nodeForSurvey(graph, inPlace.id);
+    if (!destination) return null;
+    const start = graph.nodes.find((n) => n.kind === 'entrance');
+    const route = start ? findRoute(graph, start.id, destination.id) : null;
+    return { destination: destination.name, steps: (route?.steps ?? []).map((s) => s.text) };
+  },
 };

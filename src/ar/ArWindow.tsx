@@ -13,13 +13,14 @@
  */
 import { useRef, useState } from 'react';
 import {
+  useAddWorkOrderTask,
   useChangeWorkOrderStatus,
   useSetTaskStatus,
   useWorkOrderStatuses,
   useWorkOrdersForAsset,
   useWorkOrderTasks,
 } from '../api/hooks';
-import { briefAsset } from '../api/agents';
+import { briefAsset, suggestTasks } from '../api/agents';
 import type { Asset, WorkOrder } from '../api/types';
 import Icon from '../components/Icon';
 import { isEmbeddedInFacilio, openRecordSummary } from '../api/nav';
@@ -267,7 +268,7 @@ export default function ArWindow({
             </>
           )}
 
-          {view.kind === 'wo' && <WoDetail wo={view.wo} assetId={asset.id} />}
+          {view.kind === 'wo' && <WoDetail wo={view.wo} assetId={asset.id} assetName={asset.name} />}
         </div>
 
         {/* the visionOS grabber: drag to give the window more room */}
@@ -298,12 +299,31 @@ export default function ArWindow({
 
 /** One work order, in place: summary, checklist execution, status actions —
  * the same moves as the Facilio summary page, without leaving the camera. */
-function WoDetail({ wo, assetId }: { wo: WorkOrder; assetId: number }) {
+function WoDetail({ wo, assetId, assetName }: { wo: WorkOrder; assetId: number; assetName?: string }) {
   const tasks = useWorkOrderTasks(wo.id);
   const setTask = useSetTaskStatus(wo.id);
+  const addTask = useAddWorkOrderTask(wo.id);
   const statuses = useWorkOrderStatuses();
   const changeStatus = useChangeWorkOrderStatus(assetId);
   const done = (tasks.data ?? []).filter((t) => t.closed).length;
+
+  // AI-proposed checklist: each proposal is a chip; tapping WRITES that task.
+  // Proposals the agent already sees exist are filtered by the agent seam.
+  const [proposed, setProposed] = useState<{ busy: boolean; tasks: string[] }>({
+    busy: false,
+    tasks: [],
+  });
+  const runSuggest = () => {
+    if (proposed.busy) return;
+    setProposed({ busy: true, tasks: [] });
+    void suggestTasks(
+      { subject: wo.subject, description: wo.description },
+      assetName,
+      (tasks.data ?? []).map((t) => t.subject),
+    )
+      .then((rows) => setProposed({ busy: false, tasks: rows }))
+      .catch(() => setProposed({ busy: false, tasks: [] }));
+  };
 
   return (
     <div className="vg-detail">
@@ -361,6 +381,27 @@ function WoDetail({ wo, assetId }: { wo: WorkOrder; assetId: number }) {
         </div>
       ))}
       {setTask.isError && <p className="vg-err">{(setTask.error as Error).message}</p>}
+
+      <div className="vg-status-row">
+        <button className="vg-status-btn" disabled={proposed.busy} onClick={runSuggest}>
+          <Icon name="sparkle" size={14} />
+          {proposed.busy ? 'Thinking…' : 'AI: suggest tasks'}
+        </button>
+        {proposed.tasks.map((subject) => (
+          <button
+            key={subject}
+            className="vg-status-btn"
+            disabled={addTask.isPending}
+            onClick={() => {
+              addTask.mutate(subject);
+              setProposed((prev) => ({ ...prev, tasks: prev.tasks.filter((t) => t !== subject) }));
+            }}
+          >
+            + {subject}
+          </button>
+        ))}
+      </div>
+      {addTask.isError && <p className="vg-err">{(addTask.error as Error).message}</p>}
 
       <h4 className="vg-section">Move to</h4>
       {/* capsule transitions, not a dropdown: a select's floating list has no

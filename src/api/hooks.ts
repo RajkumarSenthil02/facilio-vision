@@ -77,6 +77,16 @@ export function useWorkOrderStatuses() {
   });
 }
 
+export function useAddWorkOrderTask(workOrderId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (subject: string) => provider.addWorkOrderTask(workOrderId, subject),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['workorder', workOrderId, 'tasks'] });
+    },
+  });
+}
+
 export function useSetTaskStatus(workOrderId: number) {
   const queryClient = useQueryClient();
   return useMutation({

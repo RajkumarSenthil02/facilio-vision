@@ -1,7 +1,7 @@
 {
   "title": "fv_wo_draft",
   "type": "object",
-  "description": "Draft maintenance work order derived from one fault photo plus the CONTEXT line. Contains no ids of any kind — the app decides which asset the work order is raised against.",
+  "description": "Draft maintenance work order derived from one fault photo plus the CONTEXT line. Contains no ids of any kind \u2014 the app decides which asset the work order is raised against.",
   "properties": {
     "subject": {
       "type": "string",
@@ -13,10 +13,26 @@
     },
     "priority": {
       "type": "string",
-      "enum": ["High", "Medium", "Low"],
+      "enum": [
+        "High",
+        "Medium",
+        "Low"
+      ],
       "description": "High only for a hazard or stoppage visible in the photo; Medium for a real defect degrading service; Low for cosmetic wear, no evident fault, or no photo."
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "2 to 5 short imperative checklist steps for THIS fault, ordered make-safe first. Inspection steps when no fault is evident. No generic filler."
     }
   },
-  "required": ["subject", "description", "priority"],
+  "required": [
+    "subject",
+    "description",
+    "priority",
+    "tasks"
+  ],
   "additionalProperties": false
 }

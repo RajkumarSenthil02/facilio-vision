@@ -180,6 +180,114 @@ export const CASES = [
   // ────────────────────────────── fv-voice ──────────────────────────────
   {
     agent: 'fv-voice',
+    name: 'voice/spoken-wo-number-is-an-id',
+    counterexample: '{"tool":"get_work_order","args":{"workOrderId":14275287}}… or a guessy answer',
+    why: 'A spoken number resolves through find_work_order, which handles ids of any status.',
+    input: "CONTEXT: siteId=2915\nCOMMAND: what's the status of work order 14275287",
+    expect(raw) {
+      const call = parseTool(raw);
+      if (!call) return `expected a tool call, got a final answer: ${raw.slice(0, 120)}`;
+      if (call.tool === 'find_work_order' && /14275287/.test(String(call.args.text ?? ''))) return true;
+      if (call.tool === 'get_work_order' && num(call.args.workOrderId) === 14275287) return true;
+      return `expected the number to reach find_work_order/get_work_order, got ${call.tool} ${JSON.stringify(call.args)}`;
+    },
+  },
+  {
+    agent: 'fv-voice',
+    name: 'voice/direction-to-floor-starts-with-find_location',
+    counterexample: '{"tool":"direction_to","args":{"kind":"floor","id":4}}',
+    why: 'Place ids must be surfaced by find_location before direction_to may use them.',
+    input: 'CONTEXT: siteId=2915\nCOMMAND: take me to the fourth floor of tower A',
+    expect(raw) {
+      const call = parseTool(raw);
+      if (!call) return `expected a tool call, got a final answer: ${raw.slice(0, 120)}`;
+      if (call.tool === 'direction_to') return 'called direction_to with an id nothing surfaced';
+      if (call.tool !== 'find_location') return `expected find_location first, got ${call.tool}`;
+      return true;
+    },
+  },
+  {
+    agent: 'fv-voice',
+    name: 'voice/direction-second-hop-uses-surfaced-place-id',
+    counterexample: '{"tool":"direction_to","args":{"kind":"floor","id":4}}',
+    why: 'The id from the find_location TOOL RESULT is the only legal one.',
+    input: [
+      'CONTEXT: siteId=2915',
+      'COMMAND: take me to the fourth floor of tower A',
+      'TOOL RESULT (find_location):',
+      'floor id=88 "Floor 4" in Tower A',
+      'Answer or call another tool.',
+    ].join('\n'),
+    expect(raw) {
+      const call = parseTool(raw);
+      if (!call) return `expected direction_to, got a final answer: ${raw.slice(0, 120)}`;
+      if (call.tool !== 'direction_to') return `expected direction_to, got ${call.tool}`;
+      if (num(call.args.id) !== 88) return `used id ${call.args.id}, tool result said 88`;
+      if (String(call.args.kind) !== 'floor') return `kind should be floor, got ${call.args.kind}`;
+      return true;
+    },
+  },
+  {
+    agent: 'fv-voice',
+    name: 'voice/dictated-tasks-become-add_tasks-on-the-wo-in-view',
+    counterexample: '{"tool":"add_tasks","args":{"workOrderId":123,"tasks":["check belt tension and grease the bearings"]}}',
+    why: 'Dictated tasks split into imperative subjects and target the WO in view.',
+    input: 'CONTEXT: siteId=101 workOrderInView=#77\nCOMMAND: add two tasks, check the belt tension and grease the bearings',
+    expect(raw) {
+      const call = parseTool(raw);
+      if (!call) return `expected add_tasks, got a final answer: ${raw.slice(0, 120)}`;
+      if (call.tool !== 'add_tasks') return `expected add_tasks, got ${call.tool}`;
+      const tasks = Array.isArray(call.args.tasks) ? call.args.tasks : [];
+      if (tasks.length !== 2) return `expected 2 tasks, got ${tasks.length}: ${JSON.stringify(tasks)}`;
+      const wo = num(call.args.workOrderId);
+      if (wo !== undefined && wo !== 77) return `targeted WO ${wo}, in view is 77`;
+      return true;
+    },
+  },
+  {
+    agent: 'fv-voice',
+    name: 'voice/unmapped-place-answer-adds-nothing',
+    counterexample: 'Go down the corridor and turn left at the stairs.',
+    why: 'An unmapped destination must be repeated honestly, never embellished with invented directions.',
+    input: [
+      'CONTEXT: siteId=2915',
+      'COMMAND: guide me to the pump room',
+      'TOOL RESULT (direction_to):',
+      'No survey standpoint is mapped in that space yet, so there is no indoor route — the Wayfinder tab handles outdoor directions.',
+      'Answer or call another tool.',
+    ].join('\n'),
+    expect(raw) {
+      const call = parseTool(raw);
+      if (call) return `expected a final answer, got a tool call ${call.tool}`;
+      if (/corridor|turn (left|right)|stairs|metres|meters/i.test(raw)) return `invented directions: ${raw.slice(0, 120)}`;
+      if (!/not mapped|isn't mapped|no.*route|wayfinder/i.test(raw)) return `should say it is unmapped: ${raw.slice(0, 120)}`;
+      return true;
+    },
+  },
+  {
+    agent: 'fv-tasks',
+    name: 'tasks/proposes-missing-not-duplicates',
+    counterexample: '{"tasks":["Replace air filters"]}',
+    why: 'Existing tasks are listed in the input; proposals must not repeat them.',
+    input: 'Work order: "Quarterly AHU service". Asset: AHU-03 (Air Handling Unit). Existing tasks: Replace air filters; Check belt tension.',
+    expect(raw) {
+      let parsed;
+      try {
+        parsed = JSON.parse(stripFences(raw));
+      } catch {
+        return `not JSON: ${raw.slice(0, 120)}`;
+      }
+      const tasks = Array.isArray(parsed.tasks) ? parsed.tasks : [];
+      if (tasks.length < 3 || tasks.length > 6) return `expected 3-6 tasks, got ${tasks.length}`;
+      const dupe = tasks.find((t) => /replace air filters|check belt tension/i.test(String(t)));
+      if (dupe) return `duplicated an existing task: ${dupe}`;
+      const long = tasks.find((t) => String(t).length > 60);
+      if (long) return `task over 60 chars: ${long}`;
+      return true;
+    },
+  },
+  {
+    agent: 'fv-voice',
     name: 'voice/lookup-before-anything-else',
     counterexample: "Chiller 3 has two open work orders.",
     why: 'A name with no id in CONTEXT must become find_asset.',

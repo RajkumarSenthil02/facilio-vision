@@ -74,6 +74,16 @@ export async function createFaultWorkOrder(
     // narrowest scope wins — the WO lands with real building/space values
     spaceId: ctx.scope?.floorId ?? ctx.scope?.buildingId,
   });
+  // The draft agent proposes the checklist too — a work order born from a
+  // photo arrives EXECUTABLE, not just described. Task failures never sink
+  // the create: the record exists, the checklist is best-effort.
+  for (const subject of draft.tasks ?? []) {
+    try {
+      await deps.addWorkOrderTask(workOrderId, subject);
+    } catch {
+      break;
+    }
+  }
   deps.speak(`Created work order ${workOrderId}: ${draft.subject}.`);
   return workOrderId;
 }

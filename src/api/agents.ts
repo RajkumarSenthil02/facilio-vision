@@ -34,6 +34,7 @@ export const IDENTIFY_AGENT = 'fv-identify';
 export const WO_DRAFT_AGENT = 'fv-wo-draft';
 export const NAMEPLATE_AGENT = 'fv-nameplate';
 export const VOICE_AGENT = 'fv-voice';
+export const TASKS_AGENT = 'fv-tasks';
 
 /** Vision inference is slow; anything past this is a hung run, not a slow one. */
 export const DEFAULT_AGENT_TIMEOUT_MS = 45_000;
@@ -100,6 +101,9 @@ export interface WoDraft {
   subject: string;
   description: string;
   priority: 'High' | 'Medium' | 'Low';
+  /** Proposed checklist (2-5 imperative steps). Optional: older agent
+   * revisions and repaired replies may omit it — callers treat missing as []. */
+  tasks?: string[];
 }
 
 export interface Nameplate {
@@ -118,7 +122,11 @@ const mock = {
       subject: 'Inspect equipment anomaly',
       description: 'Mock draft: visible wear on the housing; verify and schedule follow-up.',
       priority: 'Medium',
+      tasks: ['Isolate equipment', 'Inspect housing wear', 'Record findings with photos'],
     };
+  },
+  suggestedTasks(): string[] {
+    return ['Isolate power and lock out', 'Inspect and clean unit', 'Verify operation and record readings'];
   },
   nameplate(): Nameplate {
     return { manufacturer: 'Acme', model: 'AX-100', serial: 'SN-0042' };
@@ -337,10 +345,52 @@ export async function draftWorkOrder(
         description: typeof parsed.description === 'string' ? parsed.description : '',
         priority:
           parsed.priority === 'High' || parsed.priority === 'Low' ? parsed.priority : 'Medium',
+        tasks: Array.isArray(parsed.tasks)
+          ? parsed.tasks
+              .map((t: unknown) => String(t ?? '').trim())
+              .filter(Boolean)
+              .slice(0, 5)
+          : [],
       };
     },
     { ...opts, fileIds: [fileId] },
   );
+}
+
+/**
+ * Checklist proposals for an EXISTING work order (fv-tasks). Text in, text
+ * out — the app owns the ids and the write. Existing tasks ride along so the
+ * agent proposes what is MISSING, never duplicates.
+ */
+export async function suggestTasks(
+  wo: { subject: string; description?: string },
+  assetName?: string,
+  existing: string[] = [],
+  opts: AgentRunOptions = {},
+): Promise<string[]> {
+  if (isMockMode()) return mock.suggestedTasks();
+  const input = [
+    `Work order: "${wo.subject}".`,
+    wo.description ? `Description: ${wo.description}` : '',
+    assetName ? `Asset: ${assetName}.` : '',
+    `Existing tasks: ${existing.length ? existing.join('; ') : 'none'}.`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const out = await runStructured<{ tasks: string[] }>(
+    TASKS_AGENT,
+    input,
+    (parsed) => {
+      const tasks = Array.isArray(parsed.tasks)
+        ? parsed.tasks.map((t: unknown) => String(t ?? '').trim()).filter(Boolean)
+        : [];
+      if (tasks.length === 0) throw new Error('tasks agent returned no tasks');
+      const have = new Set(existing.map((t) => t.toLowerCase()));
+      return { tasks: tasks.filter((t) => !have.has(t.toLowerCase())).slice(0, 6) };
+    },
+    opts,
+  );
+  return out.tasks;
 }
 
 export async function readNameplate(

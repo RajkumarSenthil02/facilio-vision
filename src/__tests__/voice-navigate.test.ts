@@ -84,3 +84,80 @@ describe('navigate_to', () => {
     expect(answer).toMatch(/not connected|map/i);
   });
 });
+
+describe('location directions (find_location → direction_to)', () => {
+  it('routes to a floor surfaced by find_location', async () => {
+    const deps = fakeDeps({
+      findLocations: vi.fn(async () => [
+        { kind: 'floor' as const, id: 88, name: 'Floor 4', parent: 'Tower A' },
+      ]),
+      routeToPlace: vi.fn(async () => ({
+        destination: 'F4 Lobby',
+        steps: ['Head to Lift 2 — 40m north', 'Take the lift to F4 Lobby — up 3 floors'],
+      })),
+      voiceTurn: scriptedTurns(
+        '{"tool":"find_location","args":{"text":"floor 4"}}',
+        '{"tool":"direction_to","args":{"kind":"floor","id":88}}',
+        'Head to Lift 2, then take it up to the F4 lobby.',
+      ),
+    });
+    const { answer } = await runToolLoop('take me to the fourth floor', ctx, deps);
+    expect(deps.routeToPlace).toHaveBeenCalledWith({ kind: 'floor', id: 88 });
+    expect(answer).toMatch(/F4/i);
+  });
+
+  it('refuses direction_to for a place the loop never surfaced', async () => {
+    const deps = fakeDeps({
+      voiceTurn: scriptedTurns(
+        '{"tool":"direction_to","args":{"kind":"building","id":777}}',
+        'Let me look that up first.',
+      ),
+    });
+    await runToolLoop('directions to building 777', ctx, deps);
+    expect(deps.routeToPlace).not.toHaveBeenCalled();
+  });
+});
+
+describe('work orders by id + task adds', () => {
+  it('a numeric find_work_order resolves the id directly, any status', async () => {
+    const deps = fakeDeps({
+      getWorkOrder: vi.fn(async () => ({
+        id: 14275287,
+        subject: 'AC service',
+        status: 'Submitted',
+        resourceId: 2282232,
+        resourceName: 'Warehouse Panel',
+      })),
+      voiceTurn: scriptedTurns(
+        '{"tool":"find_work_order","args":{"text":"14275287"}}',
+        'Work order 14275287 is Submitted.',
+      ),
+    });
+    const { answer } = await runToolLoop('status of work order 14275287', ctx, deps);
+    expect(deps.getWorkOrder).toHaveBeenCalledWith(14275287);
+    expect(answer).toMatch(/Submitted/);
+  });
+
+  it('add_tasks writes only to a work order the loop has seen (or in view)', async () => {
+    const deps = fakeDeps({
+      voiceTurn: scriptedTurns(
+        '{"tool":"add_tasks","args":{"workOrderId":555,"tasks":["Check belts"]}}',
+        'I need to look that work order up first.',
+      ),
+    });
+    await runToolLoop('add a belt check to 555', ctx, deps);
+    expect(deps.addWorkOrderTask).not.toHaveBeenCalled();
+  });
+
+  it('add_tasks on the work order IN VIEW appends every subject', async () => {
+    const deps = fakeDeps({
+      voiceTurn: scriptedTurns(
+        '{"tool":"add_tasks","args":{"tasks":["Check belt tension","Grease bearings"]}}',
+        'Added both tasks.',
+      ),
+    });
+    await runToolLoop('add belt and grease checks', { ...ctx, workOrderInView: 77 }, deps);
+    expect(deps.addWorkOrderTask).toHaveBeenCalledWith(77, 'Check belt tension');
+    expect(deps.addWorkOrderTask).toHaveBeenCalledWith(77, 'Grease bearings');
+  });
+});

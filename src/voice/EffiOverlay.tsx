@@ -327,9 +327,10 @@ export default function EffiOverlay({
               startListening();
             }}
           >
-            <span className="ef-ring" aria-hidden="true" />
             <span className="ef-core" aria-hidden="true">
-              <FacilioMark size={17} />
+              <span className="ef-swirl" />
+              <span className="ef-specular" />
+              <FacilioMark size={16} />
             </span>
           </button>
         </div>
@@ -337,6 +338,9 @@ export default function EffiOverlay({
 
       {phase !== 'idle' && (
         <>
+          {(phase === 'listening' || phase === 'thinking') && (
+            <div className="ef-edge" aria-hidden="true" />
+          )}
           <div className="ef-dim" onClick={close} />
           <section className="ef-panel" aria-label="Effi voice agent">
             <div className="ef-status">

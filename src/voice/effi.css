@@ -1,7 +1,20 @@
-/* Effi — Vision AR Voice Agent, to the design file (claude.ai/design
-   4a77f71a · Vision AR Voice Agent.dc.html). Colour is the only Siri
-   borrowing: the ring runs the four wordmark colours; everything else is
-   Atom dark glass, 6/8px radii, 180ms decel-out (cubic-bezier(.2,0,0,1)). */
+/* Effi — Vision AR Voice Agent, evolved to the visionOS AI language:
+   - the orb is a GLASS SPHERE that glows from within (blurred four-colour
+     swirl under a specular highlight), not a disc with a hard ring;
+   - invoking it lights the Apple-Intelligence EDGE GLOW: an animated
+     four-colour gradient hugging the screen perimeter while Effi listens
+     and thinks (conic angle via @property; hue-drift fallback);
+   - the panel is the same glass material as the AR windows.
+   Anatomy still follows the design file (status row, live words, waveform,
+   reply-as-card, toast); wordmark colours carry the identity. */
+
+@property --ef-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes efAngle { to { --ef-angle: 360deg; } }
+@keyframes efHue { to { filter: blur(7px) saturate(170%) hue-rotate(360deg); } }
 
 @keyframes efSpin { to { transform: rotate(360deg); } }
 @keyframes efRipple { 0% { opacity: 0.5; transform: scale(0.85); } 100% { opacity: 0; transform: scale(1.9); } }
@@ -40,8 +53,8 @@
 }
 .ef-orb {
   position: relative;
-  width: 76px;
-  height: 76px;
+  width: 68px;
+  height: 68px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -50,28 +63,80 @@
   align-items: center;
   justify-content: center;
 }
-.ef-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-  background: conic-gradient(from 0deg, #2ed1ff, #0059d6, #3c229d, #ff3b7f, #2ed1ff);
-  opacity: 0.35;
-  animation: efSpin 2600ms linear infinite;
-  transition: opacity 180ms cubic-bezier(0.2, 0, 0, 1);
-}
-.ef-orb:active .ef-ring { opacity: 1; }
 .ef-core {
   position: relative;
-  width: 60px;
-  height: 60px;
+  width: 64px;
+  height: 64px;
   border-radius: 999px;
-  background: #3c229d;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  box-shadow: 0 8px 24px rgba(11, 18, 32, 0.55);
+  overflow: hidden;
+  isolation: isolate;
+  background: rgba(140, 140, 145, 0.24);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  backdrop-filter: blur(14px) saturate(180%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 10px 26px rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
   animation: efBreathe 3200ms cubic-bezier(0.2, 0, 0, 1) infinite;
+}
+/* the intelligence lives INSIDE the glass: a soft four-colour swirl */
+.ef-swirl {
+  position: absolute;
+  inset: -8px;
+  border-radius: 999px;
+  background: conic-gradient(from 0deg, #2ed1ff, #0059d6, #3c229d, #ff3b7f, #ffd60a, #2ed1ff);
+  filter: blur(12px) saturate(170%);
+  opacity: 0.55;
+  animation: efSpin 6s linear infinite;
+}
+.ef-orb:active .ef-swirl { opacity: 0.9; }
+/* the top-light catch that sells the sphere */
+.ef-specular {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: radial-gradient(80% 55% at 50% 12%, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0) 60%);
+  pointer-events: none;
+}
+.ef-core svg { position: relative; z-index: 1; filter: drop-shadow(0 1px 4px rgba(11, 18, 32, 0.5)); }
+
+/* ---- Apple-Intelligence edge glow: the screen perimeter carries the
+   listening/thinking state, hugging the display curvature ---- */
+.ef-edge {
+  position: absolute;
+  inset: 0;
+  z-index: 17;
+  pointer-events: none;
+  border-radius: 24px;
+  animation: efFade 240ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+.ef-edge::before,
+.ef-edge::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--ef-angle),
+    #2ed1ff, #0059d6, #3c229d, #ff3b7f, #ffd60a, #2ed1ff
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: efAngle 4s linear infinite, efHue 8s linear infinite;
+}
+.ef-edge::before {
+  padding: 3px;
+  filter: blur(7px) saturate(170%);
+}
+.ef-edge::after {
+  padding: 16px;
+  filter: blur(26px) saturate(170%);
+  opacity: 0.45;
 }
 
 /* ---- dim + panel ---- */
@@ -92,9 +157,11 @@
   flex-direction: column;
   gap: 14px;
   padding: 18px 16px 22px;
-  background: rgba(11, 18, 32, 0.86);
-  border-top: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 24px 24px 0 0;
+  background: linear-gradient(rgba(10, 12, 16, 0.4), rgba(10, 12, 16, 0.4)), rgba(140, 140, 145, 0.22);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: 26px 26px 0 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 -12px 40px rgba(0, 0, 0, 0.35);
   animation: efRise 180ms cubic-bezier(0.2, 0, 0, 1) both;
   color: #fff;
   font-family: var(--font-sans);
@@ -231,9 +298,10 @@
   flex-direction: column;
   gap: 10px;
   padding: 14px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  border: none;
+  border-radius: 14px;
 }
 .ef-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .ef-card-title { color: #fff; font-size: 14px; font-weight: 600; }

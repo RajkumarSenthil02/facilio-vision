@@ -16,7 +16,6 @@ import { getEmbedFn, syntheticVec, EMBED_MODEL_ID } from '../ar/embedding';
 import { ArCard, ArSpace } from '../ar/ArSpace';
 import { AssetTag, NoteTag } from '../ar/markers';
 import DsSelect from '../components/DsSelect';
-import LocationPicker from '../components/LocationPicker';
 import Sheet from '../components/Sheet';
 import { CameraView } from '../components/camera/CameraView';
 import { useCamera } from '../components/camera/useCamera';
@@ -70,6 +69,7 @@ export default function PlaceAssetsScreen({
   const mock = isMockMode();
   const queryClient = useQueryClient();
   const { scope, names } = useLocationScope();
+  const scopeLabel = names.floor ?? names.building ?? names.site ?? '';
   const getFix = useGeoFix(true);
   const pose = useHeading(150);
 
@@ -248,9 +248,6 @@ export default function PlaceAssetsScreen({
                   placeholder="Survey point name (e.g. AHU room — door side)"
                 />
               </label>
-              <div className="sv-selects">
-                <LocationPicker />
-              </div>
               <button
                 className="btn-cta"
                 disabled={!name.trim()}
@@ -262,8 +259,10 @@ export default function PlaceAssetsScreen({
                 Start placing
               </button>
               <p className="sv-help">
-                Stand where a technician would stand, then turn on the spot and tap each asset
-                they should see. The room fingerprints itself as you go.
+                {scopeLabel
+                  ? `Saved under ${scopeLabel}. `
+                  : 'Saved without a location — set one on the Surveys screen. '}
+                Stand where a technician would stand, then turn and tap each asset.
               </p>
             </Sheet>
           </>

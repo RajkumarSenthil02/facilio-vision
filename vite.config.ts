@@ -3,7 +3,10 @@ import react from '@vitejs/plugin-react';
 
 // Vibe serves the app from https://<linkName>.vibe.facilio.com and zips whatever
 // is in `build.publish` (dist). index.html must land at the root of dist.
+const BUILD_ID = new Date().toISOString().slice(5, 16).replace('T', ' ');
+
 export default defineConfig({
+  define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   plugins: [react()],
   build: {
     outDir: 'dist',

@@ -66,7 +66,9 @@ export default function SurveysScreen() {
         <div className="sv-head-row">
           <span className="sv-title-wrap">
             <h2 className="sv-h1">Surveys</h2>
-            {me.data && <span className="sv-org">Org {me.data.org.orgId}</span>}
+            <span className="sv-org">
+              {me.data ? `Org ${me.data.org.orgId}` : 'Signing in…'} · build {__BUILD_ID__}
+            </span>
           </span>
           <button
             className="sv-chip"

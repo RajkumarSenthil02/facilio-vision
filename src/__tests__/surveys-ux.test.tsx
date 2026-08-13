@@ -194,11 +194,13 @@ describe('new survey point — camera + sheet', () => {
     expect(panel!.querySelector('.sheet-grip')).not.toBeNull();
     expect(within(panel as HTMLElement).getByRole('heading', { name: 'New survey point' })).toBeInTheDocument();
 
-    // name input, DS selects (never native <select>), gradient CTA, helper copy
+    // name input + CTA only. The location cascade was REMOVED from creation:
+    // it made this sheet so tall it covered the entire camera view, and the
+    // scope is already chosen (and shown) on the Surveys screen.
     const input = screen.getByLabelText('Survey point name');
     expect(input).toHaveClass('sv-input');
     expect(container.querySelector('select')).toBeNull();
-    expect(container.querySelectorAll('.sv-selects .ds-select-btn').length).toBeGreaterThanOrEqual(3);
+    expect(container.querySelectorAll('.ds-select-btn')).toHaveLength(0);
 
     const start = screen.getByRole('button', { name: 'Start placing' });
     expect(start).toHaveClass('btn-cta');

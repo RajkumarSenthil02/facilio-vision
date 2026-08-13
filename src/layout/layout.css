@@ -13,7 +13,6 @@
   grid-template-areas:
     'topbar topbar'
     'sidebar main';
-  height: var(--app-h);
   background: var(--bg-app);
 }
 
@@ -92,10 +91,11 @@
 /* ---- mobile camera-first frame: content + 52px bottom icon dock ---- */
 
 .as-mobile {
-  /* App-height flex column: the DOCK is a flex row, the MAIN pane scrolls.
-     Nothing is position:fixed and nothing relies on page scroll — that is
-     what stops the "bottom bar under the fold" bug on iOS. */
-  height: var(--app-h);
+  /* Fill the space .app gives us — NOT an absolute 100dvh. Asserting the full
+     viewport height here meant any banner above the shell pushed the dock
+     below the fold, leaving a dead strip under it. */
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-app);

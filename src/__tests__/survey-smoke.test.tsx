@@ -157,13 +157,13 @@ describe('presence decay policy (pure)', () => {
   const fixHere: GeoFix = { lat: 12.97, lng: 77.59, accuracy: 10, at: now };
   const fixFarAway: GeoFix = { lat: 12.99, lng: 77.59, accuracy: 10, at: now }; // ~2.2km
 
-  it('a visual match is stale after 20s while a scanned sticker is not', () => {
-    const at25s = { survey, fix: null, lastMatchAt: now - 25_000, now };
-    expect(presenceDecayCheck({ presence: visual, ...at25s })).toEqual({
+  it('a visual match goes stale long before a scanned sticker does', () => {
+    const at50s = { survey, fix: null, lastMatchAt: now - 50_000, now };
+    expect(presenceDecayCheck({ presence: visual, ...at50s })).toEqual({
       decayed: true,
       reason: 'stale',
     });
-    expect(presenceDecayCheck({ presence: qr, ...at25s })).toEqual({ decayed: false });
+    expect(presenceDecayCheck({ presence: qr, ...at50s })).toEqual({ decayed: false });
   });
 
   it('even a sticker goes stale past 180s', () => {
@@ -171,7 +171,31 @@ describe('presence decay policy (pure)', () => {
       presenceDecayCheck({ presence: qr, survey, fix: null, lastMatchAt: now - 200_000, now }),
     ).toEqual({ decayed: true, reason: 'stale' });
     expect(QR_STALE_MS).toBe(180_000);
-    expect(VISUAL_STALE_MS).toBe(20_000);
+    expect(VISUAL_STALE_MS).toBe(45_000);
+  });
+
+  it('REGRESSION: a scan is proof on its own clock — the visual matcher\'s silence cannot expire it', () => {
+    // The bug: decay was measured only from the relocalizer's lastMatchAt, so
+    // panning away (matcher stops matching) made markers vanish under someone
+    // who had just scanned the sticker and had not moved.
+    const justScanned = { ...qr, at: now - 5_000 };
+    expect(
+      presenceDecayCheck({
+        presence: justScanned,
+        survey,
+        fix: null,
+        lastMatchAt: now - 10 * 60_000, // matcher quiet for ten minutes
+        now,
+      }),
+    ).toEqual({ decayed: false });
+  });
+
+  it('the freshest proof of either kind keeps presence alive', () => {
+    const oldScan = { ...qr, at: now - 10 * 60_000 };
+    // stale scan, but the visual matcher just re-confirmed the same standpoint
+    expect(
+      presenceDecayCheck({ presence: oldScan, survey, fix: null, lastMatchAt: now - 1_000, now }),
+    ).toEqual({ decayed: false });
   });
 
   it('walking out of the area kills visual presence, but the geo gate never applies to QR', () => {

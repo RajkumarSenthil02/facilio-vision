@@ -278,7 +278,7 @@ export default function ARScreen() {
     }
     const standpoint = reloc.confirmByQr(surveys, code, orient.ok ? orient.heading : undefined);
     if (standpoint) {
-      setPresence({ surveyId: standpoint.id, delta: reloc.current?.delta ?? 0, via: 'qr' });
+      setPresence({ surveyId: standpoint.id, delta: reloc.current?.delta ?? 0, via: 'qr', at: Date.now() });
       setHint(`Standpoint confirmed — ${standpoint.name}`);
       return;
     }
@@ -338,8 +338,10 @@ export default function ARScreen() {
           if (!cur) return;
           setPresence((prev) =>
             prev && prev.surveyId === cur.surveyId
-              ? { ...prev, delta: cur.delta }
-              : { surveyId: cur.surveyId, delta: cur.delta, via: 'visual' },
+              ? // a re-match is FRESH proof — refresh the clock, keep the
+                // stronger 'via' (a QR scan is not downgraded by a visual hit)
+                { ...prev, delta: cur.delta, at: Date.now() }
+              : { surveyId: cur.surveyId, delta: cur.delta, via: 'visual', at: Date.now() },
           );
         } catch {
           /* a missed frame is not an error */

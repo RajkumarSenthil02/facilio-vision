@@ -78,6 +78,10 @@ let guide: GuideNode | null = null;
 export const DOCK_CLEAR_PX = 104;
 /** Cards' anchor line sits at 42% of the viewport height (ArCard base top). */
 const CARD_BASE_Y = 0.42;
+/** Half the vertical field a marker is considered "in view" for. */
+const VIEW_PITCH_DEG = 38;
+/** How far decluttering may shift a card before anchoring stops being true. */
+const MAX_DECLUTTER_PX = 56;
 /** ArGuide arrival threshold (deg). */
 const ARRIVE_DEG = 10;
 
@@ -109,7 +113,11 @@ function layout() {
   for (const n of nodes.values()) {
     const dx = smooth.ok ? wrap(n.heading - smooth.heading) : 0;
     const dy = smooth.ok ? smooth.pitch - n.pitch : 0;
-    const off = Math.abs(dx) > 55;
+    // A marker leaves the view VERTICALLY as well as horizontally. Without
+    // this it was clamped to the bottom band instead — so tilting up or down
+    // slid the cards along the floor of the screen and they read as
+    // unanchored. Off-view is off-view, in either axis.
+    const off = Math.abs(dx) > 55 || Math.abs(dy) > VIEW_PITCH_DEG;
     if (off !== n.hidden) {
       n.hidden = off;
       n.el.style.visibility = off ? 'hidden' : '';
@@ -144,19 +152,27 @@ function layout() {
     const maxY = window.innerHeight * (1 - CARD_BASE_Y) - DOCK_CLEAR_PX - v.h / 2;
     const overlaps = (p: { x: number; top: number; bottom: number }, y: number) =>
       Math.abs(p.x - v.x) < w * 0.75 && y - v.h / 2 < p.bottom && y + v.h / 2 > p.top;
-    let y = Math.min(v.y, maxY);
+    // Anchoring beats tidiness: a card may be nudged clear of a neighbour, but
+    // only within MAX_DECLUTTER_PX of where its pitch actually puts it. It used
+    // to be free to slide anywhere, which is what made markers drift while the
+    // phone tilted.
+    const anchorY = v.y;
+    let y = Math.min(anchorY, maxY);
     for (let guard = 0; guard < 6; guard++) {
       const clash = placed.find((p) => overlaps(p, y));
       if (!clash) break;
-      y = clash.bottom + v.h / 2 + 8;
+      const next = clash.bottom + v.h / 2 + 8;
+      if (Math.abs(next - anchorY) > MAX_DECLUTTER_PX) break;
+      y = next;
     }
     if (y > maxY) {
-      // pushed into the dock band — walk back up past whatever clashes
       y = maxY;
       for (let guard = 0; guard < 6; guard++) {
         const clash = placed.find((p) => overlaps(p, y));
         if (!clash) break;
-        y = clash.top - v.h / 2 - 8;
+        const next = clash.top - v.h / 2 - 8;
+        if (Math.abs(next - anchorY) > MAX_DECLUTTER_PX) break;
+        y = next;
       }
     }
     placed.push({ x: v.x, top: y - v.h / 2, bottom: y + v.h / 2 });

@@ -16,10 +16,22 @@ export interface Presence {
   /** No usable Δ/decay source — opened by explicit user intent; never decays. */
   forced?: boolean;
   via?: 'qr' | 'visual';
+  /**
+   * When this proof was established (epoch ms).
+   *
+   * Decay used to be measured ONLY from the visual relocalizer's last match,
+   * so a scanned QR — the strongest proof we have — expired on a clock it
+   * never set: pan away, the visual matcher stops matching, and markers
+   * vanished under a technician who had not moved. Proof is now whichever is
+   * more recent, this or the matcher.
+   */
+  at?: number;
 }
 
 export const QR_STALE_MS = 180_000;
-export const VISUAL_STALE_MS = 20_000;
+// A visual match is weak proof, but 20s was short enough that simply looking
+// at the equipment you came to work on lost the markers.
+export const VISUAL_STALE_MS = 45_000;
 export const GEO_TRIP_METERS = 100;
 export const GEO_ACCURACY_GATE_M = 50;
 
@@ -42,7 +54,9 @@ export function presenceDecayCheck(args: {
       : false;
   if (tooFar) return { decayed: true, reason: 'left-area' };
   const staleMs = isQr ? QR_STALE_MS : VISUAL_STALE_MS;
-  if (lastMatchAt > 0 && now - lastMatchAt > staleMs) return { decayed: true, reason: 'stale' };
+  // The freshest proof of either kind keeps presence alive.
+  const provenAt = Math.max(presence.at ?? 0, lastMatchAt);
+  if (provenAt > 0 && now - provenAt > staleMs) return { decayed: true, reason: 'stale' };
   return { decayed: false };
 }
 

@@ -35,3 +35,24 @@ describe('draftBearing', () => {
     expect(draft).toEqual({ rel: 0, bearingKnown: true });
   });
 });
+
+describe('placement reading', () => {
+  it('takes the circular median so an outlier at the tap cannot be written forever', async () => {
+    const { setOrientationForTest, placementOrientation } = await import('../hooks/useHeading');
+    // a run of steady readings with one wild sample in the middle
+    for (const h of [10, 11, 10, 190, 11, 10]) setOrientationForTest(h, 0);
+    const reading = placementOrientation();
+    expect(reading).not.toBeNull();
+    // the 190° spike must not drag the answer away from ~10°
+    const d = Math.abs(((reading!.heading - 10 + 540) % 360) - 180);
+    expect(d).toBeLessThan(20);
+  });
+
+  it('wraps correctly around north (359 and 1 average to ~0, not ~180)', async () => {
+    const { setOrientationForTest, placementOrientation } = await import('../hooks/useHeading');
+    for (const h of [359, 1, 0, 358, 2]) setOrientationForTest(h, 0);
+    const reading = placementOrientation();
+    const d = Math.abs(((reading!.heading - 0 + 540) % 360) - 180);
+    expect(d).toBeLessThan(15);
+  });
+});

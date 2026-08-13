@@ -22,7 +22,7 @@ import { CameraView } from '../components/camera/CameraView';
 import { useCamera } from '../components/camera/useCamera';
 import { linkCode } from '../vision/codes';
 import { useGeoFix } from '../hooks/useGeoFix';
-import { arOrientation, enableArOrientation, useHeading } from '../hooks/useHeading';
+import { enableArOrientation, placementOrientation, useHeading } from '../hooks/useHeading';
 import { wrap } from '../wayfinding/bearing';
 import { useLocationScope } from '../state/LocationContext';
 import '../styles/ar.css';
@@ -123,15 +123,16 @@ export default function PlaceAssetsScreen({
    * prompt), so notes stacked on one point AND were saved that way. A wrong
    * bearing that looks placed is worse than no bearing at all.
    */
+  // Placement reads the MEDIAN of the last ~600ms, not one instant: a marker
+  // is written once and lives forever, so an outlier at the moment of the tap
+  // is permanent. The live overlay keeps using the un-medianed value.
   const currentHeading = (): number | null => {
     if (mock) return mockHeading;
-    const o = arOrientation();
-    return o.ok ? o.heading : null;
+    return placementOrientation()?.heading ?? null;
   };
   const currentPitch = (): number | null => {
     if (mock) return 0;
-    const o = arOrientation();
-    return o.ok ? o.pitch : null;
+    return placementOrientation()?.pitch ?? null;
   };
 
   // The stage stops where the dock begins, so the dock stays visible (design)

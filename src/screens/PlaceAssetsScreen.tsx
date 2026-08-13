@@ -13,6 +13,7 @@ import { useAssetSearch } from '../api/hooks';
 import { isMockMode } from '../api/provider';
 import type { Asset, Survey, SurveyMarker, SweepFrame } from '../api/types';
 import { getEmbedFn, syntheticVec, EMBED_MODEL_ID } from '../ar/embedding';
+import { draftBearing } from '../wayfinding/bearingDraft';
 import { ArCard, ArSpace } from '../ar/ArSpace';
 import { AssetTag, NoteTag } from '../ar/markers';
 import DsSelect from '../components/DsSelect';
@@ -54,11 +55,16 @@ const CAPTURE_STEP_DEG = 28;
  */
 type Step = 'setup' | 'sweep' | 'markers';
 
+/** What a marker stands for. Work orders and findings are raised in place. */
+export type MarkerKind = 'asset' | 'note' | 'workorder' | 'finding';
+
 interface MarkerDraft {
   rel: number;
   pitch: number;
   /** Chosen by the footer button, so the form opens on the right mode. */
-  kind: 'asset' | 'note';
+  kind: MarkerKind;
+  /** False when the compass was silent — the form then asks for the direction. */
+  bearingKnown: boolean;
 }
 
 let markerSeq = 0;
@@ -109,15 +115,23 @@ export default function PlaceAssetsScreen({
     return () => clearTimeout(t);
   }, [hint]);
 
-  const currentHeading = (): number => {
+  /**
+   * null means "the compass is not answering" — NEVER 0.
+   *
+   * Returning 0 silently gave every marker the same bearing whenever motion
+   * access was denied or absent (desktop, or iOS before the permission
+   * prompt), so notes stacked on one point AND were saved that way. A wrong
+   * bearing that looks placed is worse than no bearing at all.
+   */
+  const currentHeading = (): number | null => {
     if (mock) return mockHeading;
     const o = arOrientation();
-    return o.ok ? o.heading : 0;
+    return o.ok ? o.heading : null;
   };
-  const currentPitch = (): number => {
+  const currentPitch = (): number | null => {
     if (mock) return 0;
     const o = arOrientation();
-    return o.ok ? o.pitch : 0;
+    return o.ok ? o.pitch : null;
   };
 
   // The stage stops where the dock begins, so the dock stays visible (design)
@@ -154,12 +168,20 @@ export default function PlaceAssetsScreen({
   }, [step, mock, pose, frames]);
 
 
-  const placeMarkerHere = (kind: 'asset' | 'note') => {
+  const placeMarkerHere = (kind: MarkerKind) => {
     // Direction FROZEN AT THE MOMENT OF THE TAP so the phone can be lowered
     // to type. Stored relative to sweep frame 0.
     const base = frames[0]?.heading ?? 0;
-    const rel = (currentHeading() - base + 360) % 360;
-    setMarkerForm({ rel, pitch: currentPitch(), kind });
+    const heading = currentHeading();
+    const pitch = currentPitch();
+
+    const { rel, bearingKnown } = draftBearing({
+      heading,
+      sweepBase: base,
+      markerCount: markers.length,
+    });
+    if (!bearingKnown) setHint('No compass here — set each marker’s direction by hand.');
+    setMarkerForm({ rel, pitch: pitch ?? 0, kind, bearingKnown });
   };
 
   const addMarker = (m: Omit<SurveyMarker, 'id'>) => {
@@ -387,16 +409,20 @@ export default function PlaceAssetsScreen({
         <div className="pa-foot">
           <div className="pa-actions">
             <button className="pa-btn primary" onClick={() => placeMarkerHere('asset')}>
-              + Asset marker
+              + Asset
             </button>
+            <button className="pa-btn dark" onClick={() => placeMarkerHere('workorder')}>
+              Work order
+            </button>
+            <button className="pa-btn dark" onClick={() => placeMarkerHere('finding')}>
+              Finding
+            </button>
+          </div>
+          <div className="pa-actions">
             <button className="pa-btn light" onClick={() => placeMarkerHere('note')}>
               Note
             </button>
-            <button
-              className="pa-btn light"
-              disabled={saving}
-              onClick={() => void save()}
-            >
+            <button className="pa-btn light" disabled={saving} onClick={() => void save()}>
               {saving ? 'Saving…' : `Save survey (${markers.length})`}
             </button>
           </div>
@@ -419,43 +445,78 @@ function MarkerForm({
   onCancel: () => void;
   onAdd: (m: Omit<SurveyMarker, 'id'>) => void;
 }) {
-  const [kind, setKind] = useState<'asset' | 'note' | 'label'>(draft.kind);
+  const [kind, setKind] = useState<MarkerKind>(draft.kind);
   const [text, setText] = useState('');
   const [picked, setPicked] = useState<Asset | null>(null);
+  // Editable when the compass could not supply it — see placeMarkerHere.
+  const [bearing, setBearing] = useState(String(Math.round(draft.rel)));
 
   const search = useAssetSearch(
     { text: text.trim(), scope: scopeSiteId ? { siteId: scopeSiteId } : undefined },
     kind === 'asset' && text.trim().length > 0,
   );
 
-  const canAdd = kind === 'asset' ? picked !== null : text.trim().length > 0;
+  const bearingNum = Number(bearing);
+  const bearingOk = Number.isFinite(bearingNum) && bearingNum >= 0 && bearingNum < 360;
+  const canAdd = (kind === 'asset' ? picked !== null : text.trim().length > 0) && bearingOk;
 
   const submit = () => {
     if (!canAdd) return;
+    const heading = ((bearingNum % 360) + 360) % 360;
+    const base = { heading, pitch: draft.pitch };
     if (kind === 'asset' && picked) {
-      onAdd({ label: picked.name, heading: draft.rel, pitch: draft.pitch, assetId: picked.id });
-    } else if (kind === 'note') {
-      onAdd({ label: text.trim().slice(0, 60), note: text.trim(), heading: draft.rel, pitch: draft.pitch });
+      onAdd({ ...base, label: picked.name, assetId: picked.id });
+    } else if (kind === 'note' || kind === 'finding') {
+      // A finding is a note the technician wants acted on — same anchor, and
+      // the AR panel offers "raise a work order" from it.
+      const body = text.trim();
+      onAdd({
+        ...base,
+        label: (kind === 'finding' ? `Finding: ${body}` : body).slice(0, 60),
+        note: body,
+      });
+    } else if (kind === 'workorder') {
+      onAdd({ ...base, label: text.trim().slice(0, 60), note: text.trim() });
     } else {
-      onAdd({ label: text.trim(), heading: draft.rel, pitch: draft.pitch });
+      onAdd({ ...base, label: text.trim() });
     }
   };
 
   return (
     <div className="pa-sheet" role="dialog" aria-label="New marker">
       <h3>
-        Marker at {Math.round(draft.rel)}° / {Math.round(draft.pitch)}°
+        {draft.bearingKnown
+          ? `Marker at ${Math.round(draft.rel)}° / ${Math.round(draft.pitch)}°`
+          : 'New marker — set its direction'}
       </h3>
+      {!draft.bearingKnown && (
+        <>
+          <p className="pa-hint" style={{ padding: 0, textAlign: 'left' }}>
+            No compass reading here, so the direction can’t be captured by aiming. Enter it in
+            degrees from the survey’s first sweep frame (0 = where you started).
+          </p>
+          <label className="field">
+            <span>Direction (0–359°)</span>
+            <input
+              inputMode="numeric"
+              value={bearing}
+              onChange={(e) => setBearing(e.target.value)}
+              placeholder="e.g. 90"
+            />
+          </label>
+        </>
+      )}
       <DsSelect
         label="Type"
         value={kind}
         options={[
           { value: 'asset', label: 'Asset' },
+          { value: 'workorder', label: 'Work order' },
+          { value: 'finding', label: 'Finding' },
           { value: 'note', label: 'Note' },
-          { value: 'label', label: 'Label' },
         ]}
         onChange={(v) => {
-          setKind(v as 'asset' | 'note' | 'label');
+          setKind(v as MarkerKind);
           setPicked(null);
         }}
       />

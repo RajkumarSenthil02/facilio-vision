@@ -106,3 +106,20 @@ describe('AI brief fallback', () => {
     expect(localBrief({ name: 'AHU-03' }, [])).toMatch(/clear/i);
   });
 });
+
+describe('system navigation (connected-app openSummary)', () => {
+  it('embedded detection requires BOTH host params; standalone falls back fast', async () => {
+    const { isEmbeddedInFacilio, openRecordSummary } = await import('../api/nav');
+    window.history.replaceState({}, '', '/?mock=1');
+    expect(isEmbeddedInFacilio()).toBe(false);
+    // standalone: resolves false immediately — the caller uses the template
+    await expect(openRecordSummary('workorder', 42)).resolves.toBe(false);
+
+    window.history.replaceState({}, '', '/?origin=https%3A%2F%2Facme.facilio.com&capp_id=77');
+    expect(isEmbeddedInFacilio()).toBe(true);
+
+    window.history.replaceState({}, '', '/?origin=https%3A%2F%2Facme.facilio.com');
+    expect(isEmbeddedInFacilio()).toBe(false); // origin alone is not the host
+    window.history.replaceState({}, '', '/?mock=1');
+  });
+});

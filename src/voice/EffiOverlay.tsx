@@ -33,6 +33,7 @@ import {
   type FaultResult,
 } from './reportFault';
 import { useVoice } from './useVoice';
+import { isEmbeddedInFacilio, openRecordSummary } from '../api/nav';
 import { draftWorkOrder, readNameplate } from '../api/agents';
 import { appStore } from '../api/appStore';
 import Icon from '../components/Icon';
@@ -590,11 +591,19 @@ export default function EffiOverlay({
                       </div>
                     )}
                     <div className="ef-card-actions">
-                      {openWoLink && (
+                      {card.workOrderId != null && isEmbeddedInFacilio() ? (
+                        <button
+                          type="button"
+                          className="ef-btn-primary"
+                          onClick={() => void openRecordSummary('workorder', card.workOrderId as number)}
+                        >
+                          Open work order
+                        </button>
+                      ) : openWoLink ? (
                         <a className="ef-btn-primary" href={openWoLink} target="_blank" rel="noopener noreferrer">
                           Open work order
                         </a>
-                      )}
+                      ) : null}
                       {card.workOrderId != null && (
                         <button
                           type="button"

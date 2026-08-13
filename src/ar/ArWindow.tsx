@@ -22,6 +22,7 @@ import {
 import { briefAsset } from '../api/agents';
 import type { Asset, WorkOrder } from '../api/types';
 import Icon from '../components/Icon';
+import { isEmbeddedInFacilio, openRecordSummary } from '../api/nav';
 import './visionGlass.css';
 
 type View = { kind: 'home' } | { kind: 'wos' } | { kind: 'wo'; wo: WorkOrder };
@@ -109,10 +110,25 @@ export default function ArWindow({
     >
       <span className="vg-anchor-dot" aria-hidden="true" />
       {/* ornament: floats OUTSIDE the window's top edge, visionOS-style.
-          ALWAYS present — with a link template it opens the real summary
-          page; without one it walks the admin to Settings, because an
-          affordance that silently vanishes reads as a bug in the field. */}
-      {link ? (
+          ALWAYS present. Preference order: the HOST's own navigation when the
+          app runs embedded in Facilio (openSummary — zero config, always the
+          right route), then the Settings URL template, then a walk to
+          Settings — an affordance that silently vanishes reads as a bug. */}
+      {isEmbeddedInFacilio() ? (
+        <button
+          type="button"
+          className="vg-ornament"
+          onClick={() =>
+            void openRecordSummary(
+              view.kind === 'wo' ? 'workorder' : 'asset',
+              view.kind === 'wo' ? view.wo.id : asset.id,
+            )
+          }
+        >
+          <Icon name="external" size={14} />
+          {view.kind === 'wo' ? 'Open summary in Facilio' : 'Open in Facilio'}
+        </button>
+      ) : link ? (
         <a className="vg-ornament" href={link} target="_blank" rel="noopener noreferrer">
           <Icon name="external" size={14} />
           {view.kind === 'wo' ? 'Open summary in Facilio' : 'Open in Facilio'}

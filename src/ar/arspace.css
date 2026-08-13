@@ -1,0 +1,329 @@
+/* =========================================================
+   WS-B additions: AR space chrome (edge chevrons, guide),
+   sheets/panels over the stage, Place-Assets overlay and the
+   Surveys registry. Extends src/styles/ar.css (read-only) —
+   same scrim discipline, no backdrop-filter.
+   ========================================================= */
+
+/* Camera mount — the integrator replaces the backdrop with the live feed. */
+.ar-camera-slot {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: #0b1220;
+}
+
+/* ---------- edge chevrons (off-screen markers) ---------- */
+
+.vs-edge {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  background: rgba(16, 24, 38, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-pill);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.vs-edge-label {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vs-edge-chev { opacity: 0.8; font-size: 13px; }
+
+/* ---------- wayfinder guide pill ---------- */
+
+.vs-guide {
+  position: absolute;
+  top: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  background: rgba(16, 24, 38, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-xl);
+  color: #fff;
+  pointer-events: auto;
+}
+
+.vs-guide-arrow {
+  font-size: 22px;
+  line-height: 1;
+  display: block;
+  transition: transform 90ms linear;
+}
+
+.vs-guide-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.vs-guide-name { font-size: 13px; font-weight: 600; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vs-guide-dir { font-size: 11px; color: rgba(255, 255, 255, 0.75); }
+
+.vs-guide-x {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+/* ---------- transient hint toast ---------- */
+
+.ar-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 148px;
+  transform: translateX(-50%);
+  z-index: 11;
+  max-width: 86%;
+  padding: 8px 14px;
+  background: rgba(16, 24, 38, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-lg);
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ---------- board minimized pill ---------- */
+
+.ar-board-restore {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(16, 24, 38, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-pill);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* ---------- bottom sheets over the stage ---------- */
+
+.ar-sheet {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 90px;
+  max-height: 62%;
+  overflow: auto;
+  z-index: 12;
+  background: var(--bg-surface, #fff);
+  color: var(--ink-900, #283648);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+}
+
+.ar-sheet-hd {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px 10px;
+  background: inherit;
+  border-bottom: 1px solid var(--ink-100, #e3ebf5);
+}
+
+.ar-sheet-hd h3 { margin: 0; font-size: 14px; font-weight: 600; }
+
+.ar-sheet-x {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: var(--ink-600, #607796);
+  cursor: pointer;
+  padding: 4px 6px;
+}
+
+.ar-sheet-bd { padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+
+.ar-code-row { display: flex; gap: 8px; align-items: center; }
+.ar-code-row input { flex: 1; }
+
+/* marker index rows */
+.mi-group { margin: 4px 0 2px; font-size: 12px; font-weight: 600; color: var(--ink-600, #607796); }
+
+.mi-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 2px;
+  border-bottom: 1px solid var(--ink-050, #f0f5fb);
+}
+
+.mi-row .lbl { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi-row .kind { font-size: 11px; color: var(--ink-600, #607796); }
+.mi-row .meta { font-family: var(--font-mono, monospace); font-size: 11px; color: var(--ink-600, #607796); }
+
+/* ordered wayfinding legs */
+.leg-list { margin: 0; padding: 0 0 0 20px; display: flex; flex-direction: column; gap: 8px; }
+.leg-list li { font-size: 13px; }
+.leg-note { font-size: 12px; color: var(--ink-600, #607796); }
+
+/* ---------- side panel (focused asset / work orders) ---------- */
+
+.ar-side-panel {
+  position: absolute;
+  top: 54px;
+  right: 8px;
+  bottom: 92px;
+  width: min(380px, 88vw);
+  z-index: 12;
+  overflow: auto;
+  background: var(--bg-surface, #fff);
+  color: var(--ink-900, #283648);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+  padding: 12px 14px;
+}
+
+.ar-side-panel-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ar-side-panel-hd h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.ar-side-panel .row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+
+/* ---------- Place-Assets full-screen overlay ---------- */
+
+.pa-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--hud-bg, #0b1220);
+  color: #fff;
+  font-family: var(--font-sans);
+}
+
+.pa-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 12px;
+  background: rgba(16, 24, 38, 0.9);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.pa-topbar h2 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
+.pa-step { font-size: 11px; color: rgba(255, 255, 255, 0.65); }
+
+.pa-body { position: relative; flex: 1; overflow: hidden; }
+
+.pa-foot {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: rgba(16, 24, 38, 0.9);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+/* centered light card used for setup / QR / marker forms */
+.pa-sheet {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  width: min(420px, calc(100vw - 32px));
+  max-height: 76%;
+  overflow: auto;
+  background: var(--bg-surface, #fff);
+  color: var(--ink-900, #283648);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 5;
+}
+
+.pa-sheet h3 { margin: 0; font-size: 15px; }
+
+.pa-progress { display: flex; align-items: center; gap: 8px; }
+.pa-progress .bar { flex: 1; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.16); overflow: hidden; }
+.pa-progress .bar span { display: block; height: 100%; background: var(--blue-500, #0059d6); }
+.pa-progress .n { font-family: var(--font-mono, monospace); font-size: 12px; }
+
+.pa-hint { font-size: 12px; color: rgba(255, 255, 255, 0.72); text-align: center; padding: 0 16px; }
+
+.pa-marker-chips { position: absolute; left: 10px; right: 10px; bottom: 8px; display: flex; gap: 6px; flex-wrap: wrap; z-index: 4; }
+.pa-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  background: rgba(16, 24, 38, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-pill);
+  color: #fff;
+  font-size: 11px;
+}
+.pa-chip button { background: none; border: none; color: rgba(255, 255, 255, 0.7); cursor: pointer; font-size: 12px; padding: 0 2px; }
+
+.pa-asset-results { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow: auto; }
+.pa-asset-results button {
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--ink-100, #e3ebf5);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface, #fff);
+  color: var(--ink-900, #283648);
+  font-size: 13px;
+  cursor: pointer;
+}
+.pa-asset-results button.sel { border-color: var(--blue-500, #0059d6); box-shadow: 0 0 0 2px rgba(0, 89, 214, 0.18); }
+
+/* ---------- Surveys registry (light screen) ---------- */
+
+.sv-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.sv-toolbar h2 { margin: 0; flex: 1; }
+
+.sv-badges { display: inline-flex; gap: 6px; margin-left: 8px; vertical-align: middle; }
+
+.sv-meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--ink-600, #607796); }
+
+.sv-detail-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.sv-detail-head h2 { margin: 0; flex: 1; font-size: 18px; }
+
+.sv-qr-block { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.sv-standpoint-photo { max-width: 240px; border-radius: var(--radius-lg); display: block; }
+
+.sv-marker-table { width: 100%; border-collapse: collapse; }
+.sv-marker-table th { text-align: left; font-size: 11px; color: var(--ink-600, #607796); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--ink-100, #e3ebf5); }
+.sv-marker-table td { font-size: 13px; padding: 8px; border-bottom: 1px solid var(--ink-050, #f0f5fb); }
+.sv-marker-table .deg { font-family: var(--font-mono, monospace); font-size: 12px; }
+
+.sv-danger { color: var(--danger-500, #b61919); }

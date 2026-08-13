@@ -543,3 +543,6 @@
   opacity: 0.4;
   transition: opacity 300ms ease;
 }
+
+/* Reprojected-for-movement chip: informational, not alarming. */
+.ar-walkchip { background: rgba(23, 92, 211, 0.92); }

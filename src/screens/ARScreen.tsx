@@ -29,11 +29,11 @@ import type { Asset, SiteGeo, Survey, SurveyMarker, WorkOrder } from '../api/typ
 import { ArCard, ArGuide, ArSpace, setArPoseDelay, setArVideoSource } from '../ar/ArSpace';
 import { AssetTag, NoteTag, StandpointMarker } from '../ar/markers';
 import type { MarkerStatus } from '../ar/markers';
-import { markerAbsBearing, presenceDecayCheck, refreshedPresence, type Presence } from '../ar/presence';
+import { DEFAULT_MARKER_RANGE_M, markerAbsBearing, parallaxCorrected, presenceDecayCheck, refreshedPresence, type Presence } from '../ar/presence';
 import { columnProfile } from '../ar/imageShift';
 import { longAxisFovDeg, observeCalSample } from '../ar/fovCal';
 import { CAMERA_LONG_AXIS_FOV_DEG, captureFov } from '../ar/projection';
-import { installMovement, resetSteps, stepsSince } from '../ar/movement';
+import { installPdr, pdrOffset, resetPdr, TRUST_RADIUS_M, type PdrOffset } from '../ar/pdr';
 import { Relocalizer } from '../ar/relocalize';
 import { getEmbedFn, EMBED_MODEL_ID } from '../ar/embedding';
 import { dequantize, l2Normalize } from '../vision/quantize';
@@ -65,6 +65,7 @@ const HINT_COPY: Record<string, string> = {
 };
 
 const EMPTY_SURVEYS: Survey[] = [];
+const NO_WALK: PdrOffset = { x: 0, y: 0, dist: 0, steps: 0 };
 
 /** WO roll-up → the one colour a marker is allowed to vary. */
 function summarize(workOrders: WorkOrder[]) {
@@ -366,8 +367,8 @@ export default function ARScreen() {
       orient.ok && calm ? (orient.heading + (qrHit.offYaw ?? 0) + 360) % 360 : undefined;
     const standpoint = reloc.confirmByQr(surveys, code, qrBearing);
     if (standpoint) {
-      resetSteps();
-      setDisplaced(false);
+      resetPdr();
+      setWalk(NO_WALK);
       setPresence({ surveyId: standpoint.id, delta: reloc.current?.delta ?? 0, via: 'qr', at: Date.now() });
       setHint(`Standpoint confirmed — ${standpoint.name}`);
       return;
@@ -459,8 +460,8 @@ export default function ARScreen() {
           if (!cur) return;
           // A fresh match means the view still looks like the standpoint —
           // whatever the step counter accumulated was shuffling, not leaving.
-          resetSteps();
-          setDisplaced(false);
+          resetPdr();
+          setWalk(NO_WALK);
           // refreshedPresence owns the rule that keeps pins STILL: a visual
           // match refreshes the clock but may not stomp an exact QR Δ, and a
           // visual-only Δ only moves past the quantization hysteresis.
@@ -475,24 +476,31 @@ export default function ARScreen() {
     return () => clearInterval(timer);
   }, [arOn, camera.state, camera.frameCanvasRef, camera.videoRef, surveys.length]);
 
-  // ---- walking honesty: a bearing is only true FROM the standpoint ----
-  // One metre sideways mis-points a 3m marker by ~9.5° and nothing on this
-  // hardware can correct it. So the app detects the walk (step counter) and
-  // stops pretending: pins fade and the banner says why, until the view
-  // matches the standpoint again or the code is rescanned.
-  const [displaced, setDisplaced] = useState(false);
+  // ---- walking: dead-reckon the offset and RECALCULATE, then be honest ----
+  // Steps + heading give the viewer's position off the standpoint (PDR).
+  // Within trust range the markers are REPROJECTED from where the viewer
+  // actually stands (parallaxCorrected — a bearing is only true FROM the
+  // standpoint, but with a range it becomes a point, and a point can be
+  // looked at from anywhere). Past the trust radius PDR error rivals the
+  // correction, so pins fade and the banner asks for a rescan.
+  const [walk, setWalk] = useState<PdrOffset>(NO_WALK);
   useEffect(() => {
     if (!presence) {
-      setDisplaced(false);
+      setWalk(NO_WALK);
       return;
     }
-    installMovement();
-    resetSteps();
+    installPdr();
+    resetPdr();
     const timer = setInterval(() => {
-      if (stepsSince() >= 4) setDisplaced(true);
-    }, 700);
+      const off = pdrOffset();
+      setWalk((prev) =>
+        Math.abs(prev.x - off.x) < 0.05 && Math.abs(prev.y - off.y) < 0.05 ? prev : off,
+      );
+    }, 500);
     return () => clearInterval(timer);
   }, [presence]);
+  const walkState: 'at' | 'adjusted' | 'lost' =
+    !presence || walk.dist < 0.6 ? 'at' : walk.dist > TRUST_RADIUS_M ? 'lost' : 'adjusted';
 
   // While localized, the compass may not steer the frame: Δ was measured in
   // THIS frame, so any later compass correction slides every marker by the
@@ -854,22 +862,31 @@ export default function ARScreen() {
 
       {/* markers, positioned by the ArSpace node registry */}
       {arOn && !minimized && (
-        <div className={displaced ? 'ar-marker-layer ar-displaced' : 'ar-marker-layer'}>
+        <div className={walkState === 'lost' ? 'ar-marker-layer ar-displaced' : 'ar-marker-layer'}>
         <ArSpace active={arOn}>
           {activeSurvey &&
             presence &&
             markers.map((marker) => {
               const abs = markerAbsBearing(activeSurvey, marker, presence.delta);
+              const shown =
+                walkState === 'at'
+                  ? { bearing: abs, pitch: marker.pitch }
+                  : parallaxCorrected(
+                      abs,
+                      marker.pitch,
+                      marker.rangeM ?? DEFAULT_MARKER_RANGE_M,
+                      walk,
+                    );
               const summary = summarize(
                 marker.assetId ? (byAsset.get(marker.assetId) ?? []) : [],
               );
               return (
                 <ArCard
                   key={marker.id}
-                  heading={abs}
-                  pitch={marker.pitch}
+                  heading={shown.bearing}
+                  pitch={shown.pitch}
                   edgeLabel={marker.label}
-                  onEdgeClick={() => startGuide(abs, marker.label)}
+                  onEdgeClick={() => startGuide(shown.bearing, marker.label)}
                 >
                   {marker.assetId ? (
                     <AssetTag
@@ -891,12 +908,17 @@ export default function ARScreen() {
         </div>
       )}
 
-      {arOn && displaced && activeSurvey && (
+      {arOn && walkState === 'adjusted' && activeSurvey && (
+        <div className="ar-nocompass ar-walkchip" role="status">
+          <Icon name="pin" size={16} />
+          <span>Pins adjusted for your position (~{walk.dist.toFixed(1)}m from the standpoint)</span>
+        </div>
+      )}
+      {arOn && walkState === 'lost' && activeSurvey && (
         <div className="ar-nocompass" role="status">
           <Icon name="pin" size={16} />
           <span>
-            You’ve moved from the standpoint — pins are approximate. Step back to the marker
-            or rescan its code.
+            Too far from the standpoint to keep pins accurate — walk back or rescan its code.
           </span>
         </div>
       )}

@@ -161,3 +161,45 @@ describe('step detector', () => {
     expect(stepsSince()).toBe(0);
   });
 });
+
+describe('walking recalculation (PDR + parallax reprojection)', () => {
+  it('dead reckoning accumulates strides along the heading of each step', async () => {
+    const { __stepForTest, pdrOffset, resetPdr, STRIDE_M } = await import('../ar/pdr');
+    resetPdr();
+    __stepForTest(90); // two steps due east
+    __stepForTest(90);
+    const off = pdrOffset();
+    expect(off.x).toBeCloseTo(2 * STRIDE_M, 5);
+    expect(off.y).toBeCloseTo(0, 5);
+    expect(off.dist).toBeCloseTo(2 * STRIDE_M, 5);
+    resetPdr();
+    expect(pdrOffset().dist).toBe(0);
+  });
+
+  it('reprojects a marker for a viewer who stepped sideways', async () => {
+    const { parallaxCorrected } = await import('../ar/presence');
+    // marker due north, 4m out; viewer moved 1m east ⇒ the object now lies
+    // slightly WEST of north: atan(1/4) ≈ 14° left
+    const c = parallaxCorrected(0, 0, 4, { x: 1, y: 0 });
+    expect(c.bearing).toBeGreaterThan(345);
+    expect(c.bearing).toBeLessThan(347);
+  });
+
+  it('walking TOWARD a marker raises its pitch and never explodes at the object', async () => {
+    const { parallaxCorrected } = await import('../ar/presence');
+    // marker north 3m, slightly above the horizon; viewer walks 2m north
+    const c = parallaxCorrected(0, 10, 3, { x: 0, y: 2 });
+    expect(c.bearing).toBeCloseTo(0, 5);
+    expect(c.pitch).toBeGreaterThan(10); // closer ⇒ steeper look-up
+    // standing ON the object: direction is undefined — keep the stored ray
+    const on = parallaxCorrected(0, 0, 2, { x: 0, y: 2 });
+    expect(on.bearing).toBeCloseTo(0, 5);
+  });
+
+  it('a marker BEHIND the walk direction swings to the rear, not to a mirror', async () => {
+    const { parallaxCorrected } = await import('../ar/presence');
+    // marker north 2m; viewer walks 4m north — the object is now 2m BEHIND
+    const c = parallaxCorrected(0, 0, 2, { x: 0, y: 4 });
+    expect(Math.abs(((c.bearing - 180 + 540) % 360) - 180)).toBeCloseTo(0, 4);
+  });
+});

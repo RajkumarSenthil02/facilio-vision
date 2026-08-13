@@ -26,6 +26,13 @@ let steps = 0;
 let lastStepAt = 0;
 let armed = true;
 let listening = false;
+const stepSubs = new Set<() => void>();
+
+/** Fires once per detected step — dead reckoning hangs off this. */
+export function onStep(cb: () => void): () => void {
+  stepSubs.add(cb);
+  return () => stepSubs.delete(cb);
+}
 
 function onMotion(e: DeviceMotionEvent) {
   const a = e.accelerationIncludingGravity;
@@ -38,6 +45,7 @@ function onMotion(e: DeviceMotionEvent) {
     steps += 1;
     lastStepAt = now;
     armed = false;
+    for (const cb of stepSubs) cb();
   } else if (dev < STEP_THRESHOLD_MS2 * 0.4) {
     armed = true; // one count per pulse: re-arm only after it subsides
   }

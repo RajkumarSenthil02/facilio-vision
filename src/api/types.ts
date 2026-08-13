@@ -170,6 +170,9 @@ export interface SurveyMarker {
   assetId?: number;
   workOrderId?: number;
   note?: string;
+  /** Distance from the standpoint (m), when known — lets the renderer
+   * reproject the marker as the viewer walks (see parallaxCorrected). */
+  rangeM?: number;
 }
 
 export interface Survey {

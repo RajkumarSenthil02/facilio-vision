@@ -97,3 +97,44 @@ export function refreshedPresence(
 export function markerAbsBearing(survey: Survey, marker: SurveyMarker, delta: number): number {
   return ((survey.sweep[0]?.heading ?? 0) + marker.heading + delta + 360) % 360;
 }
+
+/** Typical distance of pinned room equipment when nothing better is known.
+ * Being ±2m wrong still corrects MOST of the parallax at room scale, and
+ * distant markers (where the assumption over-corrects) have little parallax
+ * to begin with. */
+export const DEFAULT_MARKER_RANGE_M = 4;
+
+/**
+ * Reproject a marker for a viewer who has WALKED off the standpoint.
+ *
+ * A stored marker is a ray from the standpoint; standing elsewhere, the same
+ * physical object lies in a different direction — that is parallax, and no
+ * amount of rotation accuracy fixes it. With the marker's range (measured or
+ * assumed) and the viewer's dead-reckoned offset, the object's position is
+ * a known point, and the corrected bearing/pitch is plain geometry:
+ *
+ *   object  = standpoint + range · ray(bearing, pitch)
+ *   viewer  = standpoint + (offsetE, offsetN)
+ *   render  = direction(viewer → object)
+ */
+export function parallaxCorrected(
+  absBearingDeg: number,
+  pitchDeg: number,
+  rangeM: number,
+  offset: { x: number; y: number },
+): { bearing: number; pitch: number } {
+  const RAD = Math.PI / 180;
+  const horiz = rangeM * Math.cos(pitchDeg * RAD);
+  const up = rangeM * Math.sin(pitchDeg * RAD);
+  const ox = horiz * Math.sin(absBearingDeg * RAD) - offset.x;
+  const oy = horiz * Math.cos(absBearingDeg * RAD) - offset.y;
+  const d = Math.hypot(ox, oy);
+  if (d < 0.15) {
+    // standing (almost) on the object — direction is meaningless, keep as-is
+    return { bearing: absBearingDeg, pitch: pitchDeg };
+  }
+  return {
+    bearing: ((Math.atan2(ox, oy) / RAD) % 360 + 360) % 360,
+    pitch: Math.atan2(up, d) / RAD,
+  };
+}

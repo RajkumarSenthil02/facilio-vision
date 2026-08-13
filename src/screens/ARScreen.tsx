@@ -38,6 +38,7 @@ import { CodeSheet } from '../components/camera/CodeSheets';
 import { useCamera } from '../components/camera/useCamera';
 import Sheet from '../components/Sheet';
 import Icon from '../components/Icon';
+import AssetSelect from '../components/AssetSelect';
 import LocationPicker from '../components/LocationPicker';
 import VoiceSheet from './VoiceSheet';
 import { useScanLoop } from '../vision/scanLoop';
@@ -1210,37 +1211,20 @@ function PinAssetPicker({
   busy: boolean;
 }) {
   const { scope } = useLocationScope();
-  const [text, setText] = useState('');
-  const results = useAssetSearch({ text, scope }, text.trim().length > 0);
+  // Choosing and committing are separate acts: browsing a dropdown must not
+  // write a permanent marker — the CTA does, once, deliberately.
+  const [picked, setPicked] = useState<Asset | null>(null);
 
   return (
     <>
-      <label className="field">
-        <span>Search assets</span>
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Type to search…"
-        />
-      </label>
-      <div className="ar-pin-results">
-        {results.data?.slice(0, 20).map((asset) => (
-          <button
-            key={asset.id}
-            className="row-card"
-            disabled={busy}
-            onClick={() => onPick(asset)}
-          >
-            <span className="sv-row-main">
-              <span className="row-card-title">{asset.name}</span>
-              <span className="row-card-meta">{asset.spaceName ?? asset.category ?? `#${asset.id}`}</span>
-            </span>
-          </button>
-        ))}
-        {text.trim() && results.data?.length === 0 && (
-          <p className="sv-help">No assets match that in this scope.</p>
-        )}
-      </div>
+      <AssetSelect value={picked} scopeSiteId={scope.siteId} onPick={setPicked} />
+      <button
+        className="btn-cta"
+        disabled={!picked || busy}
+        onClick={() => picked && onPick(picked)}
+      >
+        {busy ? 'Placing…' : picked ? `Place ${picked.name} here` : 'Place asset here'}
+      </button>
     </>
   );
 }

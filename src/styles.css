@@ -107,6 +107,15 @@ button:hover { border-color: var(--muted); }
   color: var(--muted);
 }
 
+/* ---- keyboard (set by src/shell/viewportHeight.ts) ----
+   While typing, the tab dock is dead weight: hiding it hands its 56px to the
+   form above the keys, instead of letting it ride up over the content. */
+html.kb-open .as-dock { display: none; }
+html.kb-open .pa-stage { height: var(--app-h); }
+/* If iOS pans the page to reveal a focused input, glue the app back to the
+   visible area — otherwise the top chrome slides off-screen. */
+html.kb-open #root { transform: translateY(var(--vv-top, 0px)); }
+
 /* ---- app frame ---- */
 
 .app {
@@ -621,3 +630,44 @@ button:hover { border-color: var(--muted); }
   vertical-align: top;
 }
 .diag-table td { padding: 6px 0; word-break: break-all; }
+
+/* ---- AssetSelect: the asset dropdown (DsSelect skin + a filter row) ---- */
+.as-asset-list { padding-top: 0; }
+.as-asset-filter {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--ink-100);
+  color: var(--ink-500);
+}
+.as-asset-filter input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: 400 15px/1.3 var(--font-sans);
+  color: var(--text-primary);
+}
+.as-asset-opt {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+}
+.as-asset-opt-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.as-asset-opt-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

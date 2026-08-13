@@ -2,8 +2,14 @@
    grab handle, title, internally-scrolling body, sticky footer. */
 
 .sheet-root {
+  /* Sized by --app-h, NOT `inset: 0`: the layout viewport does not shrink for
+     the keyboard, so bottom-anchored sheets kept their footers UNDER it.
+     --app-h tracks the visible area, so the footer rides above the keys. */
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--app-h, 100dvh);
   z-index: 60;
   display: flex;
   flex-direction: column;

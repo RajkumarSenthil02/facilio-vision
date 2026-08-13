@@ -239,13 +239,15 @@ button.ar-pill { cursor: pointer; }
 
 .pa-stage {
   /* Stops exactly where the app dock begins — the dock stays visible (design)
-     AND the footer actions are reachable. Spanning the whole viewport is what
-     put Save and Place-marker underneath the dock, untappable. */
+     AND the footer actions are reachable. Sized from --app-h rather than
+     bottom-anchored: the layout viewport ignores the keyboard, so a
+     `bottom:` offset left Save under the keys while the dock rode above
+     them. --app-h is the visible area, always. */
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  bottom: calc(var(--nav-h) + var(--safe-b));
+  height: calc(var(--app-h, 100dvh) - var(--nav-h) - var(--safe-b));
   z-index: 40;
   display: flex;
   flex-direction: column;

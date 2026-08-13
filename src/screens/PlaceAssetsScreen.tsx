@@ -9,13 +9,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { appStore } from '../api/appStore';
-import { useAssetSearch } from '../api/hooks';
 import { isMockMode } from '../api/provider';
 import type { Asset, Survey, SurveyMarker, SweepFrame } from '../api/types';
 import { getEmbedFn, syntheticVec, EMBED_MODEL_ID } from '../ar/embedding';
 import { draftBearing } from '../wayfinding/bearingDraft';
 import { ArCard, ArSpace, setArPoseDelay, setArVideoSource } from '../ar/ArSpace';
 import { AssetTag, NoteTag } from '../ar/markers';
+import AssetSelect from '../components/AssetSelect';
 import DsSelect from '../components/DsSelect';
 import Sheet from '../components/Sheet';
 import { CameraView } from '../components/camera/CameraView';
@@ -612,11 +612,6 @@ function MarkerForm({
   // Editable when the compass could not supply it — see placeMarkerHere.
   const [bearing, setBearing] = useState(String(Math.round(draft.rel)));
 
-  const search = useAssetSearch(
-    { text: text.trim(), scope: scopeSiteId ? { siteId: scopeSiteId } : undefined },
-    kind === 'asset' && text.trim().length > 0,
-  );
-
   const bearingNum = Number(bearing);
   const bearingOk = Number.isFinite(bearingNum) && bearingNum >= 0 && bearingNum < 360;
   const canAdd = (kind === 'asset' ? picked !== null : text.trim().length > 0) && bearingOk;
@@ -681,29 +676,18 @@ function MarkerForm({
           setPicked(null);
         }}
       />
-      <label className="field">
-        <span>{kind === 'asset' ? 'Search assets' : kind === 'note' ? 'Note' : 'Label text'}</span>
-        <input
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setPicked(null);
-          }}
-          placeholder={kind === 'asset' ? 'Type to search…' : 'Text shown on the marker'}
-          autoFocus
-        />
-      </label>
-      {kind === 'asset' && text.trim() && (
-        <div className="pa-asset-results">
-          {search.isLoading && <p className="muted small">Searching…</p>}
-          {(search.data ?? []).slice(0, 6).map((a) => (
-            <button key={a.id} className={picked?.id === a.id ? 'sel' : ''} onClick={() => setPicked(a)}>
-              {a.name}
-              {a.spaceName ? ` — ${a.spaceName}` : ''}
-            </button>
-          ))}
-          {search.data && search.data.length === 0 && <p className="muted small">No assets match.</p>}
-        </div>
+      {kind === 'asset' ? (
+        <AssetSelect value={picked} scopeSiteId={scopeSiteId} onPick={setPicked} />
+      ) : (
+        <label className="field">
+          <span>{kind === 'note' ? 'Note' : 'Label text'}</span>
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Text shown on the marker"
+            autoFocus
+          />
+        </label>
       )}
       <div className="row">
         <button className="btn btn-primary" disabled={!canAdd} onClick={submit}>

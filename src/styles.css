@@ -69,3 +69,129 @@ button:hover { border-color: var(--muted); }
   border-radius: 8px;
   color: var(--muted);
 }
+
+/* ---- app frame ---- */
+
+.app { min-height: 100vh; }
+
+/* Compact layout when running inside the Facilio host (iframe or native webview) */
+.app.embedded .shell { padding: 12px 16px; }
+.app.embedded .tab-bar { padding: 4px 16px; }
+.app.embedded h1 { font-size: 16px; }
+
+.small { font-size: 12px; }
+.row { display: flex; gap: 8px; }
+
+.auth-screen { display: grid; place-items: start center; padding-top: 12vh; text-align: center; }
+.auth-stack { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+
+/* ---- tabs ---- */
+
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  padding: 8px 20px 0;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 10;
+}
+
+.tab {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 10px 14px;
+  color: var(--muted);
+}
+
+.tab:hover { border-bottom-color: var(--line); }
+
+.tab.active {
+  color: var(--fg);
+  border-bottom-color: var(--fg);
+  font-weight: 600;
+}
+
+.screen {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* ---- errors ---- */
+
+.error-panel {
+  max-width: 720px;
+  margin: 32px auto;
+  padding: 20px 24px;
+  border: 1px solid var(--error);
+  border-radius: 8px;
+}
+
+.error-panel h2 { margin-top: 0; font-size: 17px; }
+.error-panel pre {
+  overflow-x: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.global-error-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  background: color-mix(in srgb, var(--error) 12%, var(--bg));
+  color: var(--error);
+  border-bottom: 1px solid var(--error);
+}
+
+.global-error-banner button {
+  border: none;
+  color: inherit;
+  font-size: 18px;
+  padding: 0 6px;
+}
+
+/* ---- cards / lists ---- */
+
+.card-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.card p { margin: 6px 0 0; }
+
+.pill {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---- diagnostics ---- */
+
+.diag-table { border-collapse: collapse; margin-top: 12px; width: 100%; }
+.diag-table th {
+  text-align: left;
+  padding: 6px 16px 6px 0;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+  vertical-align: top;
+}
+.diag-table td { padding: 6px 0; word-break: break-all; }

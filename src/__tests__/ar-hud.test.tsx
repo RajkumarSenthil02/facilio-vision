@@ -95,7 +95,7 @@ describe('AR HUD — mobile-native stage (mock mode)', () => {
     expect(await screen.findByRole('button', { name: /All sites/ })).toBeInTheDocument();
     // top-right rail: three 56px buttons, each with a real accessible name
     expect(screen.getByRole('button', { name: 'Voice' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Raise fault with AI' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create work order with AI' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'AR on' })).toBeInTheDocument();
     const rail = container.querySelector('.ar-rail') as HTMLElement;
     expect(within(rail).getAllByRole('button')).toHaveLength(3);

@@ -209,7 +209,7 @@ export default function ArWindow({
               <div className="vg-action-grid">
                 <button className="vg-action" onClick={onFault}>
                   <Icon name="alert" size={18} />
-                  Raise fault
+                  Create work order
                 </button>
                 <button className="vg-action" onClick={onVoice}>
                   <Icon name="mic" size={18} />

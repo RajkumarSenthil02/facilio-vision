@@ -803,7 +803,7 @@ export default function ARScreen() {
           >
             <MicIcon />
           </button>
-          <button className="ar-rail-btn ai" aria-label="Raise fault with AI" onClick={openFault}>
+          <button className="ar-rail-btn ai" aria-label="Create work order with AI" onClick={openFault}>
             <SparkleIcon />
           </button>
           <button
@@ -1229,9 +1229,9 @@ Aim captured — lower the phone to type, the pin stays where you pointed.
       </ArSheet>
 
       <ArSheet
-        label="Raise a fault"
+        label="Create work order"
         open={sheet === 'fault'}
-        title="Raise a fault"
+        title="Create work order"
         onClose={() => setSheet(null)}
         footer={
           <button

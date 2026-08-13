@@ -278,7 +278,6 @@
 .pa-stage .pa-foot .btn { min-height: 48px; height: auto; font-size: 15px; padding: 0 16px; }
 .pa-stage .pa-sheet .field input,
 .pa-stage .ar-code-row input { font-size: 16px; min-height: 48px; padding: 10px 12px; }
-.pa-stage .pa-asset-results button { min-height: 48px; font-size: 15px; }
 .pa-stage .ar-toggle { min-height: 44px; }
 .pa-stage .pa-chip { height: 34px; font-size: 13px; }
 .pa-stage .pa-chip button { min-width: 28px; min-height: 28px; }

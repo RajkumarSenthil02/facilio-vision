@@ -382,18 +382,6 @@ button.ar-pill { cursor: pointer; }
 }
 .pa-chip button { background: none; border: none; color: rgba(255, 255, 255, 0.7); cursor: pointer; font-size: 12px; padding: 0 2px; }
 
-.pa-asset-results { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow: auto; }
-.pa-asset-results button {
-  text-align: left;
-  padding: 8px 10px;
-  border: 1px solid var(--ink-100, #e3ebf5);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface, #fff);
-  color: var(--ink-900, #283648);
-  font-size: 13px;
-  cursor: pointer;
-}
-.pa-asset-results button.sel { border-color: var(--blue-500, #0059d6); box-shadow: 0 0 0 2px rgba(0, 89, 214, 0.18); }
 
 /* ---------- Surveys registry (light screen) ---------- */
 
@@ -441,4 +429,3 @@ button.ar-pill { cursor: pointer; }
 .ar-pin-kind-label { font-size: 15px; font-weight: 600; }
 .ar-pin-kind-hint { font-size: 12.5px; color: var(--ink-500); }
 
-.ar-pin-results { display: grid; gap: 8px; margin-top: 10px; max-height: 46vh; overflow-y: auto; }

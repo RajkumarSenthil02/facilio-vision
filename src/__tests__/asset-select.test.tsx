@@ -46,6 +46,12 @@ describe('AssetSelect', () => {
     // options appear with an EMPTY query — that was the whole complaint
     const options = await screen.findAllByRole('option');
     expect(options.length).toBeGreaterThan(2);
+
+    // and the list SCROLLS instead of bleeding over whatever sits below it —
+    // the capped-but-unscrollable box is exactly what broke the Place-asset
+    // sheet (options painted across the CTA)
+    const list = screen.getByRole('listbox', { name: 'Asset' });
+    expect(list).toHaveClass('scroll-y');
   });
 
   it('the filter narrows and picking closes the list', async () => {

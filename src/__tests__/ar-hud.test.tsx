@@ -242,3 +242,40 @@ describe('AR HUD — mobile-native stage (mock mode)', () => {
     );
   });
 });
+
+describe('Place asset — the sheet that shipped broken', () => {
+  it('dropdown in the scrolling body, CTA in the sticky footer, never flush siblings', async () => {
+    seed();
+    const user = userEvent.setup();
+    bootAt('?mock=1&tab=ar');
+    await screen.findByRole('button', { name: 'AR on' });
+
+    // localize by scanning the standpoint code
+    await act(async () => {
+      scanBus.emit?.('ws-01-code');
+    });
+    await screen.findByRole('button', { name: /Pin here/ });
+
+    await user.click(screen.getByRole('button', { name: /Pin here/ }));
+    await user.click(await screen.findByRole('button', { name: /Place asset/ }));
+
+    const sheet = await screen.findByRole('dialog', { name: 'Pin details' });
+    // the picker lives in the scrolling body…
+    const trigger = within(sheet).getByRole('combobox', { name: 'Asset' });
+    expect(trigger.closest('.sheet-body')).not.toBeNull();
+    // …and the commit button lives in the footer, which never scrolls away
+    // and can never be overlapped by the dropdown (the broken build had both
+    // as flush siblings in the body, with an unscrollable list on top)
+    const cta = within(sheet).getByRole('button', { name: /Place asset here/ });
+    expect(cta.closest('.sheet-footer')).not.toBeNull();
+    expect(cta).toBeDisabled(); // nothing chosen yet
+
+    await user.click(trigger);
+    const options = await within(sheet).findAllByRole('option');
+    expect(within(sheet).getByRole('listbox', { name: 'Asset' })).toHaveClass('scroll-y');
+    await user.click(options[0]);
+    await waitFor(() =>
+      expect(within(sheet).getByRole('button', { name: /Place .* here/ })).toBeEnabled(),
+    );
+  });
+});

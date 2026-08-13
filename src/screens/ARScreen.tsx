@@ -630,6 +630,8 @@ export default function ARScreen() {
    * The median-of-recent reading is used rather than one instant, because a
    * marker is written once and lives forever (see placementOrientation).
    */
+  const [pinAsset, setPinAsset] = useState<Asset | null>(null);
+
   const startPin = () => {
     if (!activeSurvey) {
       setHint('Stand at a standpoint first — a pin belongs to a survey');
@@ -652,6 +654,7 @@ export default function ARScreen() {
       known: true,
     });
     setNoteText('');
+    setPinAsset(null);
     setSheet('pin');
   };
 
@@ -1155,7 +1158,15 @@ Aim captured — lower the phone to type, the pin stays where you pointed.
         }
         onClose={() => setSheet('pin')}
         footer={
-          pinKind === 'asset' ? undefined : (
+          pinKind === 'asset' ? (
+            <button
+              className="btn-cta"
+              disabled={!pinAsset || pinBusy}
+              onClick={() => pinAsset && void commitPin(pinAsset)}
+            >
+              {pinBusy ? 'Placing…' : pinAsset ? `Place ${pinAsset.name} here` : 'Place asset here'}
+            </button>
+          ) : (
             <button
               className="btn-cta"
               disabled={!noteText.trim() || pinBusy}
@@ -1173,7 +1184,9 @@ Aim captured — lower the phone to type, the pin stays where you pointed.
         }
       >
         {pinKind === 'asset' ? (
-          <PinAssetPicker onPick={(asset) => void commitPin(asset)} busy={pinBusy} />
+          <div className="ar-pin-asset">
+            <AssetSelect value={pinAsset} scopeSiteId={scope.siteId} onPick={setPinAsset} />
+          </div>
         ) : (
           <label className="field">
             <span>
@@ -1304,28 +1317,3 @@ Aim captured — lower the phone to type, the pin stays where you pointed.
 }
 
 /** Asset search for a gated "Place asset" pin. */
-function PinAssetPicker({
-  onPick,
-  busy,
-}: {
-  onPick: (asset: Asset) => void;
-  busy: boolean;
-}) {
-  const { scope } = useLocationScope();
-  // Choosing and committing are separate acts: browsing a dropdown must not
-  // write a permanent marker — the CTA does, once, deliberately.
-  const [picked, setPicked] = useState<Asset | null>(null);
-
-  return (
-    <>
-      <AssetSelect value={picked} scopeSiteId={scope.siteId} onPick={setPicked} />
-      <button
-        className="btn-cta"
-        disabled={!picked || busy}
-        onClick={() => picked && onPick(picked)}
-      >
-        {busy ? 'Placing…' : picked ? `Place ${picked.name} here` : 'Place asset here'}
-      </button>
-    </>
-  );
-}

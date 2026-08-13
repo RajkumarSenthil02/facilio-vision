@@ -88,7 +88,13 @@ export default function AssetSelect({
   const rows = (search.data ?? []).slice(0, 50);
 
   const body = (
-    <div className="ds-select-inline as-asset-list" ref={listRef} id={listId} role="listbox" aria-label={label}>
+    <div
+      className="ds-select-inline as-asset-list scroll-y"
+      ref={listRef}
+      id={listId}
+      role="listbox"
+      aria-label={label}
+    >
       <div className="as-asset-filter">
         <Icon name="search" size={16} />
         <input

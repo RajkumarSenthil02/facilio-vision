@@ -456,6 +456,11 @@ html.kb-open #root { transform: translateY(var(--vv-top, 0px)); }
 .ds-select-inline {
   margin: 6px 0 0;
   padding: 4px;
+  /* Self-defending: a capped box that cannot scroll BLEEDS its options over
+     whatever sits below it (that shipped once — the Place-asset sheet). */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   list-style: none;
   width: 100%;
   background: var(--bg-surface);
@@ -632,6 +637,19 @@ html.kb-open #root { transform: translateY(var(--vv-top, 0px)); }
 .diag-table td { padding: 6px 0; word-break: break-all; }
 
 /* ---- AssetSelect: the asset dropdown (DsSelect skin + a filter row) ---- */
+/* The pin sheet's picker column: select, then CTA, properly spaced. */
+.ar-pin-asset {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 2px 0 6px;
+}
+/* Touch: DSM mobile control height — a 36px desktop trigger next to 48px
+   sheet inputs read as broken, and sub-16px inputs make iOS zoom the page. */
+@media (pointer: coarse), (max-width: 767px) {
+  .ds-select-btn { height: 40px; font-size: 14px; }
+  .as-asset-filter input { font-size: 16px; }
+}
 .as-asset-list { padding-top: 0; }
 .as-asset-filter {
   position: sticky;

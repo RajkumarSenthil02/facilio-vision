@@ -93,12 +93,14 @@ describe('AR HUD — mobile-native stage (mock mode)', () => {
 
     // top-left: the site chip, tappable
     expect(await screen.findByRole('button', { name: /All sites/ })).toBeInTheDocument();
-    // top-right rail: three 56px buttons, each with a real accessible name
-    expect(screen.getByRole('button', { name: 'Voice' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create work order with AI' })).toBeInTheDocument();
+    // top-right rail: ONE button — AR itself. Voice + AI-create moved into
+    // the Effi orb's visual-intelligence menu; duplicates were removed.
     expect(screen.getByRole('button', { name: 'AR on' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Voice' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Create work order with AI' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Talk to Effi' })).toBeInTheDocument();
     const rail = container.querySelector('.ar-rail') as HTMLElement;
-    expect(within(rail).getAllByRole('button')).toHaveLength(3);
+    expect(within(rail).getAllByRole('button')).toHaveLength(1);
     // the AR toggle is an icon button in the rail, not a text pill
     expect(screen.getByRole('button', { name: 'AR on' })).toHaveClass('ar-rail-btn');
     expect(screen.queryByText('AR on')).toBeNull();

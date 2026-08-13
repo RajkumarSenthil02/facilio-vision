@@ -160,20 +160,6 @@ function ArSheet(props: {
   );
 }
 
-const MicIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <rect x="9" y="3" width="6" height="11" rx="3" />
-    <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-  </svg>
-);
-
-const SparkleIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
-    <path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" />
-  </svg>
-);
-
 const ArIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" />
@@ -795,17 +781,10 @@ export default function ARScreen() {
           </svg>
         </button>
 
+        {/* the rail is down to the one control the orb does not own: AR
+            itself. Voice and AI-create live in Effi's visual-intelligence
+            menu now — two buttons duplicating it were just chrome. */}
         <div className="ar-rail">
-          <button
-            className={sheet === 'voice' ? 'ar-rail-btn mic live' : 'ar-rail-btn mic'}
-            aria-label="Voice"
-            onClick={() => setSheet(sheet === 'voice' ? null : 'voice')}
-          >
-            <MicIcon />
-          </button>
-          <button className="ar-rail-btn ai" aria-label="Create work order with AI" onClick={openFault}>
-            <SparkleIcon />
-          </button>
           <button
             className={arOn ? 'ar-rail-btn on' : 'ar-rail-btn'}
             aria-label={arOn ? 'AR on' : 'AR off'}

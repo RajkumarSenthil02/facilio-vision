@@ -9,6 +9,7 @@ import { useAsset } from '../api/hooks';
 import { deleteCapture, type CaptureRow } from '../vision/captureStore';
 import { useCaptures } from './CaptureScreen';
 import '../vision/vision.css';
+import './surveys.css';
 
 const UNGROUPED = 'Unassigned space';
 
@@ -27,39 +28,56 @@ export default function RoomsScreen() {
 
   const open = (captures.data ?? []).find((row) => row.id === openId) ?? null;
 
+  const total = captures.data?.length ?? 0;
+
+  // Same frame as Surveys: fixed head, ONE internal scroller, no page scroll.
   return (
-    <section className="screen fv-rooms">
-      <h2>Rooms</h2>
-      {captures.isLoading && <p className="muted">Loading captures…</p>}
-      {captures.isError && <p className="error">Couldn’t load captures.</p>}
-      {!captures.isLoading && groups.length === 0 && (
-        <p className="muted">No captures yet — take one from the Capture tab.</p>
-      )}
-      {groups.map(([space, rows]) => (
-        <div key={space} className="fv-room-group">
-          <h3>
-            {space} <span className="muted small">({rows.length})</span>
-          </h3>
-          <div className="fv-room-grid">
-            {rows.map((row) => (
-              <button
-                key={row.id}
-                className="fv-room-thumb"
-                aria-label={`Open capture in ${space}`}
-                onClick={() => setOpenId(row.id)}
-              >
-                <StoredPhoto fileId={row.thumbFileId} alt={`Capture in ${space}`} />
-                {row.embeddingStatus === 'pending' && (
-                  <span className="fv-thumb-pending">AI pending</span>
-                )}
-                {row.markers.length > 0 && (
-                  <span className="fv-thumb-badge">{row.markers.length}</span>
-                )}
-              </button>
-            ))}
-          </div>
+    <section className="screen sv-screen fv-rooms">
+      <header className="sv-head">
+        <div className="sv-head-row">
+          <h2 className="sv-h1">Rooms</h2>
+          <span className="sv-chip static">
+            {total} capture{total === 1 ? '' : 's'}
+          </span>
         </div>
-      ))}
+      </header>
+
+      <div className="sv-list scroll-y">
+        {captures.isLoading && <p className="sv-status">Loading captures…</p>}
+        {captures.isError && <p className="sv-status error">Couldn’t load captures.</p>}
+        {!captures.isLoading && groups.length === 0 && (
+          <p className="empty-card">
+            No captures yet. A capture is a photo of a space with its assets boxed on it — take
+            one from the Capture tab and it lands here, grouped by space.
+          </p>
+        )}
+        {groups.map(([space, rows]) => (
+          <div key={space} className="fv-room-group">
+            <h3>
+              {space} <span className="muted small">({rows.length})</span>
+            </h3>
+            <div className="fv-room-grid">
+              {rows.map((row) => (
+                <button
+                  key={row.id}
+                  className="fv-room-thumb"
+                  aria-label={`Open capture in ${space}`}
+                  onClick={() => setOpenId(row.id)}
+                >
+                  <StoredPhoto fileId={row.thumbFileId} alt={`Capture in ${space}`} />
+                  {row.embeddingStatus === 'pending' && (
+                    <span className="fv-thumb-pending">AI pending</span>
+                  )}
+                  {row.markers.length > 0 && (
+                    <span className="fv-thumb-badge">{row.markers.length}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
       {open && <CaptureViewer row={open} onClose={() => setOpenId(null)} />}
     </section>
   );

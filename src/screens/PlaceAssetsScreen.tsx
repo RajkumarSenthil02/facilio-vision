@@ -17,6 +17,7 @@ import { ArCard, ArSpace } from '../ar/ArSpace';
 import { AssetTag, NoteTag } from '../ar/markers';
 import DsSelect from '../components/DsSelect';
 import LocationPicker from '../components/LocationPicker';
+import Sheet from '../components/Sheet';
 import { CameraView } from '../components/camera/CameraView';
 import { useCamera } from '../components/camera/useCamera';
 import { getCodeEntry, linkCode, unlinkCode } from '../vision/codes';
@@ -28,6 +29,7 @@ import { wrap } from '../wayfinding/bearing';
 import { useLocationScope } from '../state/LocationContext';
 import '../styles/ar.css';
 import '../ar/arspace.css';
+import './surveys.css';
 
 /** Test/integration seam: overrides the camera as the sweep-frame source. */
 let sweepFrameSource: (() => CanvasImageSource | null) | null = null;
@@ -80,8 +82,9 @@ export default function PlaceAssetsScreen({
   const [markerForm, setMarkerForm] = useState<MarkerDraft | null>(null);
   const busyRef = useRef(false);
 
-  // The live feed runs from the sweep step onward (setup is a plain form).
-  const camera = useCamera(step === 'sweep' || step === 'qr' || step === 'markers');
+  // Camera-first: the live feed runs from the moment the overlay opens — the
+  // setup sheet sits OVER the lens instead of hiding it behind a form.
+  const camera = useCamera(true);
   const cameraFrame = (): CanvasImageSource | null => {
     const fc = camera.frameCanvasRef.current;
     if (fc && fc.width) return fc;
@@ -249,51 +252,64 @@ export default function PlaceAssetsScreen({
 
   return (
     <div className="pa-stage" role="dialog" aria-label="Place assets — AR survey">
-      <div className="pa-topbar">
-        <h2>Place assets (AR survey)</h2>
-        <span className="pa-step">{stepLabel}</span>
-        <button className="ar-toggle" onClick={onClose}>
-          Close
-        </button>
-      </div>
+      {/* On setup the camera carries the screen and a floating pill is the only
+          chrome over it; the step bar returns once the flow is underway. */}
+      {step !== 'setup' && (
+        <div className="pa-topbar">
+          <h2>Place assets (AR survey)</h2>
+          <span className="pa-step">{stepLabel}</span>
+          <button className="ar-toggle" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      )}
 
       <div className="pa-body">
-        {/* Camera mount — the live feed is the backdrop from the sweep on. */}
+        {/* Camera mount — the live feed is the backdrop the whole way through. */}
         <div id="pa-camera-slot" className="ar-camera-slot">
-          {step !== 'setup' && (
-            <CameraView
-              videoRef={camera.videoRef}
-              frameCanvasRef={camera.frameCanvasRef}
-              state={camera.state}
-              onResume={() => void camera.resume()}
-            />
-          )}
+          <CameraView
+            videoRef={camera.videoRef}
+            frameCanvasRef={camera.frameCanvasRef}
+            state={camera.state}
+            onResume={() => void camera.resume()}
+          />
         </div>
 
         {step === 'setup' && (
-          <div className="pa-sheet">
-            <h3>New survey point</h3>
-            <label className="field">
-              <span>Name</span>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. WS-01 · Pump room door"
-                autoFocus
-              />
-            </label>
-            <LocationPicker />
-            <button
-              className="btn btn-primary"
-              disabled={!name.trim()}
-              onClick={() => {
-                void enableArOrientation(); // iOS gate — this click is the user gesture
-                setStep('sweep');
-              }}
-            >
-              Start sweep
+          <>
+            <button className="pa-exit" onClick={onClose}>
+              ← Exit survey
             </button>
-          </div>
+            <Sheet open title="New survey point" onClose={onClose}>
+              <label className="sv-field">
+                <span className="sv-field-label">Survey point name</span>
+                <input
+                  className="sv-input"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Survey point name (e.g. AHU room — door side)"
+                />
+              </label>
+              <div className="sv-selects">
+                <LocationPicker />
+              </div>
+              <button
+                className="btn-cta"
+                disabled={!name.trim()}
+                onClick={() => {
+                  void enableArOrientation(); // iOS gate — this click is the user gesture
+                  setStep('sweep');
+                }}
+              >
+                Start 360° sweep
+              </button>
+              <p className="sv-help">
+                Stand where a technician would stand and turn slowly on the spot — a frame is
+                captured about every 30°, and every marker you pin later is stored relative to
+                the first one.
+              </p>
+            </Sheet>
+          </>
         )}
 
         {step === 'sweep' && (

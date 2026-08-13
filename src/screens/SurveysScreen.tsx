@@ -5,15 +5,23 @@
 // Codes live in ONE registry (src/vision/codes) keyed by the normalized code —
 // enrolling here and scanning in the AR stage must agree, so this screen never
 // writes the 'codes' collection by hand.
+//
+// Mobile-native anatomy (matches the reference app): a scope chip + gradient
+// CTA in a fixed head, ONE internally-scrolling list below it, and the survey
+// detail as a bottom Sheet rather than a second full page.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { appStore } from '../api/appStore';
-import type { Survey } from '../api/types';
+import type { Survey, SurveyMarker } from '../api/types';
 import { QrCode, printQrLabel } from '../ar/QrCode';
+import Sheet from '../components/Sheet';
+import LocationPicker from '../components/LocationPicker';
+import { useLocationScope } from '../state/LocationContext';
 import { getCodeEntry, linkCode, unlinkCode } from '../vision/codes';
 import { normalizeCode } from '../vision/qr';
 import PlaceAssetsScreen from './PlaceAssetsScreen';
 import '../ar/arspace.css';
+import './surveys.css';
 
 function useSurveys() {
   return useQuery({
@@ -32,13 +40,14 @@ function useSurveys() {
 
 export default function SurveysScreen() {
   const surveys = useSurveys();
+  const { names } = useLocationScope();
   const [openId, setOpenId] = useState<string | null>(null);
   const [authoring, setAuthoring] = useState(false);
+  const [scopeOpen, setScopeOpen] = useState(false);
 
-  const selected = useMemo(
-    () => (surveys.data ?? []).find((s) => s.id === openId) ?? null,
-    [surveys.data, openId],
-  );
+  const rows = surveys.data ?? [];
+  const selected = useMemo(() => rows.find((s) => s.id === openId) ?? null, [rows, openId]);
+  const scopeLabel = names.floor ?? names.building ?? names.site ?? 'All sites';
 
   if (authoring) {
     return (
@@ -46,53 +55,90 @@ export default function SurveysScreen() {
     );
   }
 
-  if (selected) {
-    return <SurveyDetail survey={selected} onBack={() => setOpenId(null)} />;
-  }
-
   return (
-    <section className="screen">
-      <div className="sv-toolbar">
-        <h2>Surveys</h2>
-        <button className="btn btn-primary" onClick={() => setAuthoring(true)}>
-          Place assets (AR survey)
-        </button>
-      </div>
+    <section className="screen sv-screen">
+      <header className="sv-head">
+        <div className="sv-head-row">
+          <h2 className="sv-h1">Surveys</h2>
+          <button
+            className="sv-chip"
+            aria-label={`Working scope: ${scopeLabel}`}
+            onClick={() => setScopeOpen(true)}
+          >
+            <span className="sv-chip-text">{scopeLabel}</span>
+            <span aria-hidden="true">· {rows.length} ⌄</span>
+          </button>
+        </div>
+        <div className="sv-cta-row">
+          {/* the authoring entry point — the AR survey overlay */}
+          <button className="btn-cta" onClick={() => setAuthoring(true)}>
+            <span aria-hidden="true">🧭</span> New survey
+          </button>
+        </div>
+      </header>
 
-      {surveys.isLoading && <p className="muted">Loading surveys…</p>}
-      {surveys.isError && <p className="error">{(surveys.error as Error).message}</p>}
-      {surveys.data?.length === 0 && (
-        <p className="muted">
-          No standpoints yet. “Place assets (AR survey)” walks a 360° sweep and pins markers
-          around you.
-        </p>
-      )}
+      <div className="sv-list scroll-y">
+        <div className="section-row">
+          <span className="section-label">Standpoints ({rows.length})</span>
+        </div>
 
-      {surveys.data && surveys.data.length > 0 && (
-        <ul className="card-list">
-          {surveys.data.map((survey) => (
-            <li key={survey.id} className="card">
-              <button className="card-btn" onClick={() => setOpenId(survey.id)}>
-                <strong>{survey.name}</strong>
-                <span className="sv-badges">
-                  {survey.qrCode && <span className="pill">QR enrolled</span>}
-                  <span className="pill">
-                    {survey.markers.length} marker{survey.markers.length === 1 ? '' : 's'}
-                  </span>
+        {surveys.isLoading && <p className="sv-status">Loading surveys…</p>}
+        {surveys.isError && (
+          <p className="sv-status error">{(surveys.error as Error).message}</p>
+        )}
+
+        {!surveys.isLoading && rows.length === 0 && (
+          <p className="empty-card">
+            A survey is a standpoint you have swept. Walking to it and scanning its label loads
+            every marker pinned around that spot — with no searching.
+          </p>
+        )}
+
+        {rows.length > 0 && (
+          <div className="sv-rows">
+            {rows.map((survey) => (
+              <button
+                key={survey.id}
+                className="row-card"
+                onClick={() => setOpenId(survey.id)}
+              >
+                <span className="sv-row-main">
+                  <span className="row-card-title">{survey.name}</span>
+                  <span className="row-card-meta">{metaLine(survey)}</span>
+                </span>
+                <span className={survey.qrCode ? 'row-badge ok' : 'row-badge'}>
+                  {survey.qrCode ? 'QR' : 'No QR'}
                 </span>
               </button>
-              <p className="sv-meta">
-                <span>{survey.spaceName ?? 'Unscoped'}</span>
-                <span>{survey.sweep.length} sweep frames</span>
-                <span>{new Date(survey.createdAt).toLocaleString()}</span>
-                {survey.geo && <span>geotagged</span>}
-              </p>
-            </li>
-          ))}
-        </ul>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Sheet open={scopeOpen} title="Where are you working?" onClose={() => setScopeOpen(false)}>
+        <div className="sv-selects">
+          <LocationPicker />
+        </div>
+        <p className="sv-help">
+          New surveys are stamped with this scope, and it is what the AR stage searches when it
+          looks for the standpoint you are standing at.
+        </p>
+      </Sheet>
+
+      {selected && <SurveyDetail survey={selected} onBack={() => setOpenId(null)} />}
     </section>
   );
+}
+
+function metaLine(survey: Survey): string {
+  const assets = survey.markers.filter((m) => m.assetId).length;
+  const notes = survey.markers.length - assets;
+  return [
+    survey.spaceName ?? 'Unscoped',
+    `${assets} asset${assets === 1 ? '' : 's'}`,
+    `${notes} note${notes === 1 ? '' : 's'}`,
+    `${survey.sweep.length} sweep frames`,
+  ].join(' · ');
 }
 
 function SurveyDetail({ survey, onBack }: { survey: Survey; onBack: () => void }) {
@@ -162,93 +208,101 @@ function SurveyDetail({ survey, onBack }: { survey: Survey; onBack: () => void }
     }
   };
 
+  // Markers are stored relative to sweep frame 0; the ABSOLUTE reading is what
+  // a compass shows while standing at the standpoint, so that is what we list.
   const base = survey.sweep[0]?.heading ?? 0;
+  const abs = (m: SurveyMarker) => Math.round((base + m.heading + 360) % 360);
+  const surveyed = new Date(survey.createdAt);
 
   return (
-    <section className="screen">
-      <div className="sv-detail-head">
-        <button className="btn btn-secondary" onClick={onBack}>
-          ← Surveys
-        </button>
-        <h2>{survey.name}</h2>
-      </div>
+    <Sheet open title={survey.name} onClose={onBack} size="tall">
+      {photoUrl && <img className="sv-photo" src={photoUrl} alt="Standpoint" />}
 
-      <p className="sv-meta">
-        <span>{survey.spaceName ?? 'Unscoped'}</span>
-        <span>{survey.sweep.length} sweep frames</span>
-        <span>model {survey.modelId}</span>
-        <span>{new Date(survey.createdAt).toLocaleString()}</span>
-        {survey.geo && (
-          <span>
-            {survey.geo.lat.toFixed(5)}, {survey.geo.lng.toFixed(5)} ±{survey.geo.accuracy}m
-          </span>
-        )}
-      </p>
+      <table className="info-table">
+        <tbody>
+          <tr>
+            <th>Location</th>
+            <td>{survey.spaceName ?? 'Unscoped'}</td>
+          </tr>
+          <tr>
+            <th>Surveyed</th>
+            <td>{isNaN(surveyed.getTime()) ? survey.createdAt : surveyed.toLocaleString()}</td>
+          </tr>
+          <tr>
+            <th>Sweep</th>
+            <td>
+              {survey.sweep.length} frames
+              {survey.geo ? ` · ±${Math.round(survey.geo.accuracy)}m fix` : ''}
+            </td>
+          </tr>
+          <tr>
+            <th>Model</th>
+            <td>{survey.modelId}</td>
+          </tr>
+        </tbody>
+      </table>
 
-      <div className="sv-qr-block">
-        <div ref={qrBoxRef}>
-          {survey.qrCode ? (
-            <QrCode value={survey.qrCode} />
-          ) : (
-            <p className="muted small">No standpoint QR enrolled yet.</p>
-          )}
+      {!survey.qrCode ? (
+        <div className="sv-card">
+          <p className="sv-card-copy">
+            No QR linked yet. Generating one mints a unique code for this standpoint — vendors
+            scan it to load these markers with no searching.
+          </p>
+          <button className="btn-cta" disabled={busy} onClick={() => void generateCode()}>
+            Generate QR for this survey
+          </button>
         </div>
-        <div>
-          {survey.qrCode && (
-            <p className="muted small">
-              Code <strong>{survey.qrCode}</strong>
-              {survey.qrHeading != null ? ` · enrolled facing ${Math.round(survey.qrHeading)}°` : ''}
-            </p>
-          )}
-          <div className="row">
-            {!survey.qrCode && (
-              <button className="btn btn-primary" disabled={busy} onClick={() => void generateCode()}>
-                Generate QR
-              </button>
-            )}
-            {survey.qrCode && (
-              <button className="btn btn-secondary" onClick={print}>
-                Print label
-              </button>
-            )}
-            <button className="btn btn-secondary sv-danger" disabled={busy} onClick={() => void remove()}>
-              Delete survey
-            </button>
+      ) : (
+        <div className="sv-card">
+          <div className="sv-qr-art" ref={qrBoxRef}>
+            <QrCode value={survey.qrCode} size={152} />
           </div>
+          <p className="sv-card-copy">
+            Code <strong>{survey.qrCode}</strong>
+            {survey.qrHeading != null ? ` · enrolled facing ${Math.round(survey.qrHeading)}°` : ''}
+          </p>
+          <button className="btn-quiet" onClick={print}>
+            Print label
+          </button>
         </div>
-        {photoUrl && <img className="sv-standpoint-photo" src={photoUrl} alt="Standpoint" />}
+      )}
+
+      {hint && (
+        <p className="sv-hint" role="status">
+          {hint}
+        </p>
+      )}
+
+      <div className="section-row">
+        <span className="section-label">Markers ({survey.markers.length})</span>
       </div>
 
-      {hint && <p className="muted small">{hint}</p>}
-
-      <h3>Markers</h3>
-      {survey.markers.length === 0 && <p className="muted">No markers on this standpoint.</p>}
-      {survey.markers.length > 0 && (
-        <table className="sv-marker-table">
-          <thead>
-            <tr>
-              <th>Marker</th>
-              <th>Kind</th>
-              <th>Bearing</th>
-              <th>Pitch</th>
-            </tr>
-          </thead>
-          <tbody>
-            {survey.markers.map((marker) => (
-              <tr key={marker.id}>
-                <td>{marker.label}</td>
-                <td>{marker.assetId ? 'asset' : marker.note ? 'note' : 'label'}</td>
-                {/* stored relative to sweep frame 0; the absolute reading is
-                    what a compass shows at survey time */}
-                <td className="deg">
-                  {Math.round(marker.heading)}° rel · {Math.round((base + marker.heading) % 360)}° abs
-                </td>
-                <td className="deg">{Math.round(marker.pitch)}°</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {survey.markers.length === 0 && (
+        <p className="empty-card">
+          No markers on this standpoint yet — open it in the AR stage to pin assets and notes
+          around you.
+        </p>
       )}
-    </section>
+
+      {survey.markers.map((marker) => (
+        <div className="sv-marker" key={marker.id}>
+          <span className="sv-marker-icon" aria-hidden="true">
+            {marker.assetId ? '🔧' : '📝'}
+          </span>
+          <span className="sv-marker-main">
+            <span className="sv-marker-name">{marker.label}</span>
+            <span className="sv-marker-meta">
+              bearing {abs(marker)}° · pitch {Math.round(marker.pitch)}°
+            </span>
+          </span>
+        </div>
+      ))}
+
+      <div className="sv-delete">
+        <button className="btn-danger-outline" disabled={busy} onClick={() => void remove()}>
+          Delete survey
+        </button>
+      </div>
+    </Sheet>
   );
 }

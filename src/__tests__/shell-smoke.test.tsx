@@ -38,10 +38,9 @@ describe('shell-smoke', () => {
     expect(params.get('tab')).toBe('surveys');
     expect(params.get('mock')).toBe('1'); // preserved
 
-    // The surveys registry offers its authoring entry point
-    expect(
-      await screen.findByRole('button', { name: 'Place assets (AR survey)' }),
-    ).toBeInTheDocument();
+    // The surveys registry offers its authoring entry point — the gradient CTA
+    // that opens the AR survey overlay (was 'Place assets (AR survey)')
+    expect(await screen.findByRole('button', { name: 'New survey' })).toBeInTheDocument();
   });
 
   it('hidden screens join the bar when active via ?tab=', async () => {

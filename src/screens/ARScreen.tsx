@@ -29,7 +29,7 @@ import type { Asset, SiteGeo, Survey, SurveyMarker, WorkOrder } from '../api/typ
 import { ArCard, ArGuide, ArSpace, setArPoseDelay, setArVideoSource } from '../ar/ArSpace';
 import { AssetTag, NoteTag, StandpointMarker } from '../ar/markers';
 import type { MarkerStatus } from '../ar/markers';
-import { markerAbsBearing, presenceDecayCheck, type Presence } from '../ar/presence';
+import { markerAbsBearing, presenceDecayCheck, refreshedPresence, type Presence } from '../ar/presence';
 import { Relocalizer } from '../ar/relocalize';
 import { getEmbedFn, EMBED_MODEL_ID } from '../ar/embedding';
 import { dequantize, l2Normalize } from '../vision/quantize';
@@ -46,7 +46,7 @@ import { describeEntry, resolveCode } from '../vision/codes';
 import { stampStopByCode } from '../rounds/roundsStore';
 import WorkOrderPanel from '../components/WorkOrderPanel';
 import { useGeoFix } from '../hooks/useGeoFix';
-import { arOrientation, enableArOrientation, placementOrientation, poseSpeedDegS, useHeading } from '../hooks/useHeading';
+import { arOrientation, enableArOrientation, holdYawOffset, placementOrientation, poseSpeedDegS, useHeading } from '../hooks/useHeading';
 import { indoorLegs, mapsDirectionsUrl, type WayLeg } from '../wayfinding/legs';
 import '../styles/ar.css';
 import '../ar/arspace.css';
@@ -420,13 +420,10 @@ export default function ARScreen() {
           const quant = await getEmbedFn()(src);
           const cur = relocRef.current.observe(l2Normalize(dequantize(quant)), orient.heading);
           if (!cur) return;
-          setPresence((prev) =>
-            prev && prev.surveyId === cur.surveyId
-              ? // a re-match is FRESH proof — refresh the clock, keep the
-                // stronger 'via' (a QR scan is not downgraded by a visual hit)
-                { ...prev, delta: cur.delta, at: Date.now() }
-              : { surveyId: cur.surveyId, delta: cur.delta, via: 'visual', at: Date.now() },
-          );
+          // refreshedPresence owns the rule that keeps pins STILL: a visual
+          // match refreshes the clock but may not stomp an exact QR Δ, and a
+          // visual-only Δ only moves past the quantization hysteresis.
+          setPresence((prev) => refreshedPresence(prev, cur, Date.now()));
         } catch {
           /* a missed frame is not an error */
         } finally {
@@ -436,6 +433,16 @@ export default function ARScreen() {
     }, 1500);
     return () => clearInterval(timer);
   }, [arOn, camera.state, camera.frameCanvasRef, camera.videoRef, surveys.length]);
+
+  // While localized, the compass may not steer the frame: Δ was measured in
+  // THIS frame, so any later compass correction slides every marker by the
+  // correction amount (up to the full 1°/s slew) while the phone sits still.
+  // Held ⇒ the gyro-fused relative lane carries the pose alone; the QR
+  // re-scan (forced by decay at the latest) re-roots exactly.
+  useEffect(() => {
+    holdYawOffset(presence != null);
+    return () => holdYawOffset(false);
+  }, [presence]);
 
   // ---- presence decay watchdog ----
   useEffect(() => {

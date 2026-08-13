@@ -24,7 +24,7 @@ import { linkCode, resolveCode } from '../vision/codes';
 import { decodeQr } from '../vision/qr';
 import { qrAngularOffset } from '../ar/projection';
 import { useGeoFix } from '../hooks/useGeoFix';
-import { enableArOrientation, placementOrientation, poseSpeedDegS, useHeading } from '../hooks/useHeading';
+import { enableArOrientation, holdYawOffset, placementOrientation, poseSpeedDegS, useHeading } from '../hooks/useHeading';
 import { wrap } from '../wayfinding/bearing';
 import { useLocationScope } from '../state/LocationContext';
 import '../styles/ar.css';
@@ -169,6 +169,17 @@ export default function PlaceAssetsScreen({
     document.body.classList.add('pa-open');
     return () => document.body.classList.remove('pa-open');
   }, []);
+
+  // ONE frame per survey: from the moment the origin is being captured until
+  // the overlay closes, the compass may not move the world frame. qrHeading,
+  // every sweep frame and every marker must be written against the SAME
+  // frame — a mid-authoring compass correction (or a 35° snap in a steel
+  // plant room) would silently split the survey into two frames and nothing
+  // could ever line it up again.
+  useEffect(() => {
+    if (step !== 'setup') holdYawOffset(true);
+    return () => holdYawOffset(false);
+  }, [step]);
 
   // Authoring must render markers through the SAME projection the AR screen
   // will use — the FOV comes from the real video, the pose from the frame's

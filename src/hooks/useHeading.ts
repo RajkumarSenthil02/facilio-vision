@@ -91,6 +91,8 @@ let relSeenAt = 0;
 let yawOffset = 0;
 let compassSeenAt = 0;
 let offsetSeeded = false;
+/** While held, the compass may not move the frame — see holdYawOffset(). */
+let offsetHeld = false;
 
 /** Rotation speed (deg/s): the gyro when it speaks, pose deltas otherwise. */
 let speedDegS = 0;
@@ -185,6 +187,14 @@ function ingestCompass(bearingDeg: number, at = Date.now()) {
   const mean = wrap360(Math.atan2(s, c) / RAD);
 
   const e = wrap180(mean - (rel.azimuth + yawOffset));
+
+  // HELD: once a survey Δ has been measured (or an enrolment is in flight),
+  // the frame those bearings were written in must not move underneath them.
+  // The compass's only job was to name north; registration to the PLACE now
+  // comes from the QR/visual Δ, and every compass correction after that
+  // point is pure marker slide (up to the full 1°/s slew, plus 35°+ snaps).
+  // Samples keep accumulating so release resumes with a warm mean.
+  if (offsetHeld && offsetSeeded) return;
 
   if (!offsetSeeded) {
     yawOffset = wrap360(yawOffset + e);
@@ -385,6 +395,17 @@ export function poseSpeedDegS(): number {
   return smoothed.ok ? speedDegS : 0;
 }
 
+/**
+ * Freeze the world frame. Call with true the moment bearings start being
+ * WRITTEN against the current frame (survey enrolment) or a Δ has been
+ * measured in it (presence at a standpoint); false when that ends. While
+ * held, the compass cannot slide markers — the gyro-fused relative lane is
+ * drift-free on the minutes scale, and the QR re-scan re-roots exactly.
+ */
+export function holdYawOffset(hold: boolean): void {
+  offsetHeld = hold;
+}
+
 /** Unsmoothed latest fast-lane reading, for diagnostics. */
 export function rawOrientation(): Orientation {
   return raw;
@@ -418,6 +439,7 @@ export function setOrientationForTest(heading: number | null, pitch = 0): void {
     qRel = null;
     yawOffset = 0;
     offsetSeeded = false;
+    offsetHeld = false;
     compassSeenAt = 0;
     lastRelPose = null;
     speedDegS = 0;

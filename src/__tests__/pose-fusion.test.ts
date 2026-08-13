@@ -136,3 +136,29 @@ describe('speed + placement', () => {
     expect(placed!.heading).toBeCloseTo(100, 0);
   });
 });
+
+describe('frame hold (localized / enrolling)', () => {
+  it('a held frame ignores the compass entirely — pins cannot slide at rest', async () => {
+    const { holdYawOffset } = await import('../hooks/useHeading');
+    __testFeeds.orientation({ ...upright(0), webkitCompassHeading: 100 });
+    const seeded = arOrientation().heading;
+
+    holdYawOffset(true);
+    // 5 seconds of the compass insisting on a 30° different bearing — the
+    // exact situation after scanning a QR next to a steel column
+    for (let i = 0; i < 300; i++) {
+      __testFeeds.orientation({ ...upright(0), webkitCompassHeading: 130 });
+      vi.advanceTimersByTime(16);
+    }
+    expect(arOrientation().heading).toBeCloseTo(seeded, 5);
+
+    // released ⇒ corrections resume (with the warm sample window)
+    holdYawOffset(false);
+    for (let i = 0; i < 300; i++) {
+      __testFeeds.orientation({ ...upright(0), webkitCompassHeading: 130 });
+      vi.advanceTimersByTime(16);
+    }
+    const moved = Math.abs(((arOrientation().heading - seeded + 540) % 360) - 180);
+    expect(moved).toBeGreaterThan(1);
+  });
+});

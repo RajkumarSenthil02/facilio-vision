@@ -59,3 +59,30 @@ describe('QR as the survey origin', () => {
     expect(reloc.current?.delta).toBe(20);
   });
 });
+
+describe('refreshedPresence — the visual lane may not move a settled pin', () => {
+  it('NEVER overwrites a QR Δ (that stomp was the "pointer keeps moving" bug)', async () => {
+    const { refreshedPresence } = await import('../ar/presence');
+    const prev = { surveyId: 'sv-1', delta: 20, via: 'qr' as const, at: 1000 };
+    const next = refreshedPresence(prev, { surveyId: 'sv-1', delta: 33 }, 2000);
+    expect(next.delta).toBe(20); // Δ intact…
+    expect(next.at).toBe(2000); // …but the proof clock is refreshed
+    expect(next.via).toBe('qr');
+  });
+
+  it('visual-only Δ holds inside the quantization hysteresis, follows real drift', async () => {
+    const { refreshedPresence } = await import('../ar/presence');
+    const prev = { surveyId: 'sv-1', delta: 10, via: 'visual' as const, at: 1000 };
+    // ±4° is sweep-frame quantization noise, not motion
+    expect(refreshedPresence(prev, { surveyId: 'sv-1', delta: 14 }, 2000).delta).toBe(10);
+    // 8° is a real relocation — follow it
+    expect(refreshedPresence(prev, { surveyId: 'sv-1', delta: 18 }, 2000).delta).toBe(18);
+  });
+
+  it('a match on a DIFFERENT survey replaces presence outright', async () => {
+    const { refreshedPresence } = await import('../ar/presence');
+    const prev = { surveyId: 'sv-1', delta: 20, via: 'qr' as const, at: 1000 };
+    const next = refreshedPresence(prev, { surveyId: 'sv-2', delta: 5 }, 2000);
+    expect(next).toEqual({ surveyId: 'sv-2', delta: 5, via: 'visual', at: 2000 });
+  });
+});

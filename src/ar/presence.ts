@@ -60,6 +60,35 @@ export function presenceDecayCheck(args: {
   return { decayed: false };
 }
 
+/** A visual match's Δ is quantized to the nearest sweep frame (~28° apart),
+ * so consecutive estimates can disagree by several degrees while the phone
+ * has not moved. Below this, keep the Δ we have — pins must not wobble. */
+export const VISUAL_DELTA_HYSTERESIS_DEG = 5;
+
+/**
+ * Fold a fresh visual relocalization match into presence.
+ *
+ * The rules that keep pins STILL:
+ *  - a QR Δ is exact (corner-corrected scan) — a visual match may refresh its
+ *    CLOCK but never overwrite its Δ. Stomping the exact Δ with a ±14°
+ *    frame-quantized guess every 1.5s was the "pointer keeps moving" bug.
+ *  - visual-only presence keeps its Δ until the estimate disagrees by more
+ *    than the hysteresis — real drift, not quantization noise.
+ */
+export function refreshedPresence(
+  prev: Presence | null,
+  match: { surveyId: string; delta: number },
+  now: number,
+): Presence {
+  if (prev && prev.surveyId === match.surveyId) {
+    const drift = Math.abs(((match.delta - prev.delta + 540) % 360) - 180);
+    const delta =
+      prev.via === 'qr' || drift < VISUAL_DELTA_HYSTERESIS_DEG ? prev.delta : match.delta;
+    return { ...prev, delta, at: now };
+  }
+  return { surveyId: match.surveyId, delta: match.delta, via: 'visual', at: now };
+}
+
 /**
  * Absolute render bearing for a survey marker. Markers are stored RELATIVE
  * TO SWEEP FRAME 0 (see src/api/types.ts):

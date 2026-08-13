@@ -30,6 +30,10 @@ import { ArCard, ArGuide, ArSpace, setArPoseDelay, setArVideoSource } from '../a
 import { AssetTag, NoteTag, StandpointMarker } from '../ar/markers';
 import type { MarkerStatus } from '../ar/markers';
 import { markerAbsBearing, presenceDecayCheck, refreshedPresence, type Presence } from '../ar/presence';
+import { columnProfile } from '../ar/imageShift';
+import { longAxisFovDeg, observeCalSample } from '../ar/fovCal';
+import { CAMERA_LONG_AXIS_FOV_DEG, captureFov } from '../ar/projection';
+import { installMovement, resetSteps, stepsSince } from '../ar/movement';
 import { Relocalizer } from '../ar/relocalize';
 import { getEmbedFn, EMBED_MODEL_ID } from '../ar/embedding';
 import { dequantize, l2Normalize } from '../vision/quantize';
@@ -362,6 +366,8 @@ export default function ARScreen() {
       orient.ok && calm ? (orient.heading + (qrHit.offYaw ?? 0) + 360) % 360 : undefined;
     const standpoint = reloc.confirmByQr(surveys, code, qrBearing);
     if (standpoint) {
+      resetSteps();
+      setDisplaced(false);
       setPresence({ surveyId: standpoint.id, delta: reloc.current?.delta ?? 0, via: 'qr', at: Date.now() });
       setHint(`Standpoint confirmed — ${standpoint.name}`);
       return;
@@ -399,9 +405,15 @@ export default function ARScreen() {
   }, [scan.locked]);
 
   // ---- visual relocalization lane (real camera only) ----
+  // Each tick also feeds two accuracy loops that want exactly this data:
+  // the frame's column profile refines Δ WITHIN the matched sweep frame
+  // (±14° frame-grid error → a degree or two), and consecutive
+  // (profile, heading) pairs self-calibrate the device's true FOV.
   useEffect(() => {
     if (!arOn || camera.state !== 'live' || surveys.length === 0) return;
     let busy = false;
+    const profileCanvas = document.createElement('canvas');
+    let lastCal: { profile: Float32Array; heading: number; pitch: number } | null = null;
     const timer = setInterval(() => {
       if (busy) return;
       busy = true;
@@ -417,9 +429,38 @@ export default function ARScreen() {
                 : null;
           const orient = arOrientation();
           if (!src || !orient.ok) return;
+          const w = src instanceof HTMLVideoElement ? src.videoWidth : (src as HTMLCanvasElement).width;
+          const h = src instanceof HTMLVideoElement ? src.videoHeight : (src as HTMLCanvasElement).height;
+
+          let live: { profile: Float32Array; hFovDeg: number } | undefined;
+          if (w && h) {
+            try {
+              const profile = columnProfile(src, w, h, profileCanvas);
+              const fov = captureFov(w, h, longAxisFovDeg(CAMERA_LONG_AXIS_FOV_DEG));
+              live = { profile, hFovDeg: (2 * Math.atan(fov.halfTanX) * 180) / Math.PI };
+              if (lastCal) {
+                observeCalSample({
+                  prev: lastCal.profile,
+                  next: profile,
+                  dHeadingDeg: ((orient.heading - lastCal.heading + 540) % 360) - 180,
+                  dPitchDeg: orient.pitch - lastCal.pitch,
+                  frameW: w,
+                  frameH: h,
+                });
+              }
+              lastCal = { profile, heading: orient.heading, pitch: orient.pitch };
+            } catch {
+              /* no 2d canvas — coarse matching still works */
+            }
+          }
+
           const quant = await getEmbedFn()(src);
-          const cur = relocRef.current.observe(l2Normalize(dequantize(quant)), orient.heading);
+          const cur = relocRef.current.observe(l2Normalize(dequantize(quant)), orient.heading, live);
           if (!cur) return;
+          // A fresh match means the view still looks like the standpoint —
+          // whatever the step counter accumulated was shuffling, not leaving.
+          resetSteps();
+          setDisplaced(false);
           // refreshedPresence owns the rule that keeps pins STILL: a visual
           // match refreshes the clock but may not stomp an exact QR Δ, and a
           // visual-only Δ only moves past the quantization hysteresis.
@@ -433,6 +474,25 @@ export default function ARScreen() {
     }, 1500);
     return () => clearInterval(timer);
   }, [arOn, camera.state, camera.frameCanvasRef, camera.videoRef, surveys.length]);
+
+  // ---- walking honesty: a bearing is only true FROM the standpoint ----
+  // One metre sideways mis-points a 3m marker by ~9.5° and nothing on this
+  // hardware can correct it. So the app detects the walk (step counter) and
+  // stops pretending: pins fade and the banner says why, until the view
+  // matches the standpoint again or the code is rescanned.
+  const [displaced, setDisplaced] = useState(false);
+  useEffect(() => {
+    if (!presence) {
+      setDisplaced(false);
+      return;
+    }
+    installMovement();
+    resetSteps();
+    const timer = setInterval(() => {
+      if (stepsSince() >= 4) setDisplaced(true);
+    }, 700);
+    return () => clearInterval(timer);
+  }, [presence]);
 
   // While localized, the compass may not steer the frame: Δ was measured in
   // THIS frame, so any later compass correction slides every marker by the
@@ -794,6 +854,7 @@ export default function ARScreen() {
 
       {/* markers, positioned by the ArSpace node registry */}
       {arOn && !minimized && (
+        <div className={displaced ? 'ar-marker-layer ar-displaced' : 'ar-marker-layer'}>
         <ArSpace active={arOn}>
           {activeSurvey &&
             presence &&
@@ -827,6 +888,17 @@ export default function ARScreen() {
               );
             })}
         </ArSpace>
+        </div>
+      )}
+
+      {arOn && displaced && activeSurvey && (
+        <div className="ar-nocompass" role="status">
+          <Icon name="pin" size={16} />
+          <span>
+            You’ve moved from the standpoint — pins are approximate. Step back to the marker
+            or rescan its code.
+          </span>
+        </div>
       )}
 
       {arOn && activeSurvey && !minimized && (

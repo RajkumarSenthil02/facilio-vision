@@ -141,6 +141,9 @@ export interface SweepFrame {
   pitch: number;
   /** int8+base64 quantised embedding {q, s, dim} (vision/quantize). */
   vec: { q: string; s: number; dim: number };
+  /** 64-bin column-luma profile (src/ar/imageShift) — lets relocalization
+   * measure the SUB-FRAME rotation instead of quantizing Δ to ~28° frames. */
+  profile?: number[];
   /**
    * The frame's own photo in the app file store.
    *

@@ -9,7 +9,8 @@ import { loadSiteIndex } from './captureStore';
 import type { MatchIndex } from './matcher';
 import { frameQuality, toTinyLuma } from './quality';
 import { decodeQr } from './qr';
-import { qrAngularOffset } from '../ar/projection';
+import { CAMERA_LONG_AXIS_FOV_DEG, captureFov, qrAngularOffset } from '../ar/projection';
+import { longAxisFovDeg } from '../ar/fovCal';
 import type { NormRect } from './types';
 
 export const TICK_MS = 300;
@@ -155,7 +156,12 @@ export function useScanLoop({ camera, siteId, enabled, embedder, index }: UseSca
             if (!lastQr || lastQr.code !== hit.data || now - lastQr.at >= QR_DEDUP_MS) {
               lastQr = { code: hit.data, at: now };
               const off = hit.corners
-                ? qrAngularOffset(hit.corners, hit.frameW, hit.frameH)
+                ? qrAngularOffset(
+                    hit.corners,
+                    hit.frameW,
+                    hit.frameH,
+                    captureFov(hit.frameW, hit.frameH, longAxisFovDeg(CAMERA_LONG_AXIS_FOV_DEG)),
+                  )
                 : null;
               setQrHit({
                 code: hit.data,

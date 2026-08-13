@@ -24,7 +24,8 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { arOrientation, arQuaternionAt, setOrientationForTest } from '../hooks/useHeading';
 import { bearingToCaption, wrap } from '../wayfinding/bearing';
-import { defaultFov, displayedFov, projectDirection, type ViewFov } from './projection';
+import { CAMERA_LONG_AXIS_FOV_DEG, defaultFov, displayedFov, projectDirection, type ViewFov } from './projection';
+import { longAxisFovDeg } from './fovCal';
 
 /* ---------- displayed-FOV state ---------- */
 
@@ -50,8 +51,9 @@ function currentFov(viewW: number, viewH: number): ViewFov {
   const vw = videoEl?.videoWidth ?? 0;
   const vh = videoEl?.videoHeight ?? 0;
   if (!vw || !vh) return defaultFov();
-  const key = `${vw}x${vh}|${viewW}x${viewH}`;
-  if (fovCache?.key !== key) fovCache = { key, fov: displayedFov(vw, vh, viewW, viewH) };
+  const cal = longAxisFovDeg(CAMERA_LONG_AXIS_FOV_DEG);
+  const key = `${vw}x${vh}|${viewW}x${viewH}|${cal.toFixed(1)}`;
+  if (fovCache?.key !== key) fovCache = { key, fov: displayedFov(vw, vh, viewW, viewH, cal) };
   return fovCache.fov;
 }
 

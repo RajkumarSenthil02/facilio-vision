@@ -22,7 +22,9 @@ import { CameraView } from '../components/camera/CameraView';
 import { useCamera } from '../components/camera/useCamera';
 import { linkCode, resolveCode } from '../vision/codes';
 import { decodeQr } from '../vision/qr';
-import { qrAngularOffset } from '../ar/projection';
+import { CAMERA_LONG_AXIS_FOV_DEG, captureFov, qrAngularOffset } from '../ar/projection';
+import { longAxisFovDeg } from '../ar/fovCal';
+import { columnProfile } from '../ar/imageShift';
 import { useGeoFix } from '../hooks/useGeoFix';
 import { enableArOrientation, holdYawOffset, placementOrientation, poseSpeedDegS, useHeading } from '../hooks/useHeading';
 import { wrap } from '../wayfinding/bearing';
@@ -245,7 +247,14 @@ export default function PlaceAssetsScreen({
       void decodeQr(src, w, h, work)
         .then((hit) => {
           if (!hit) return;
-          const off = hit.corners ? qrAngularOffset(hit.corners, hit.frameW, hit.frameH) : null;
+          const off = hit.corners
+            ? qrAngularOffset(
+                hit.corners,
+                hit.frameW,
+                hit.frameH,
+                captureFov(hit.frameW, hit.frameH, longAxisFovDeg(CAMERA_LONG_AXIS_FOV_DEG)),
+              )
+            : null;
           acceptCode(hit.data, off?.yawDeg ?? 0);
         })
         .finally(() => {
@@ -270,6 +279,23 @@ export default function PlaceAssetsScreen({
       const src = sweepFrameSource?.() ?? cameraFrame();
       const vec = src ? await getEmbedFn()(src) : syntheticVec(heading);
 
+      // The frame's column profile rides along (64 numbers): it is what lets
+      // a later visit measure its rotation WITHIN this frame instead of
+      // rounding Δ to the frame grid.
+      let profile: number[] | undefined;
+      if (src) {
+        try {
+          const w = src instanceof HTMLVideoElement ? src.videoWidth : (src as HTMLCanvasElement).width;
+          const h = src instanceof HTMLVideoElement ? src.videoHeight : (src as HTMLCanvasElement).height;
+          if (w && h) {
+            const work = document.createElement('canvas');
+            profile = Array.from(columnProfile(src, w, h, work), (v) => Math.round(v * 10) / 10);
+          }
+        } catch {
+          /* a frame without a profile still relocalizes coarsely */
+        }
+      }
+
       // Keep the frame's PICTURE too, not just its embedding. Held in memory
       // and uploaded at save, so abandoning a sweep costs no uploads and the
       // sweep itself stays responsive.
@@ -283,7 +309,7 @@ export default function PlaceAssetsScreen({
       setFrames((prev) => {
         if (prev.length >= MAX_FRAMES) return prev;
         if (shot) shotsRef.current[prev.length] = shot;
-        return [...prev, { heading, pitch, vec }];
+        return [...prev, { heading, pitch, vec, profile }];
       });
     } finally {
       busyRef.current = false;

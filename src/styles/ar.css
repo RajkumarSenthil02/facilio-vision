@@ -535,3 +535,11 @@
   color: #fff;
   border-color: rgba(255, 255, 255, 0.35);
 }
+
+/* Walked off the standpoint: pins stay visible but stop claiming precision. */
+.ar-marker-layer { display: contents; }
+.ar-displaced .ar-asset-tag,
+.ar-displaced .ar-note-tag {
+  opacity: 0.4;
+  transition: opacity 300ms ease;
+}

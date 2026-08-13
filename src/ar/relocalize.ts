@@ -8,12 +8,20 @@
 // error entirely (ReLoc-PDR-style visual relocalization, web edition).
 import type { Survey } from '../api/types';
 import { dequantize, l2Normalize } from './quant';
+import { profileShift, shiftDegrees } from './imageShift';
 
 interface SweepEntry {
   surveyId: string;
   frameHeading: number;
   vec: Float32Array;
+  /** Column-luma profile (new surveys) — enables the sub-frame Δ. */
+  profile: Float32Array | null;
 }
+
+/** Sub-frame refinement gates: a weak correlation or an implausibly large
+ * within-frame rotation falls back to the coarse frame-grid Δ. */
+const SHIFT_MIN_CONFIDENCE = 0.55;
+const SHIFT_MAX_DEG = 20;
 
 export class Relocalizer {
   private entries: SweepEntry[] = [];
@@ -35,6 +43,10 @@ export class Relocalizer {
           surveyId: s.id,
           frameHeading: f.heading,
           vec: l2Normalize(dequantize(f.vec)),
+          profile:
+            Array.isArray(f.profile) && f.profile.length > 8
+              ? Float32Array.from(f.profile)
+              : null,
         });
       }
     }
@@ -44,10 +56,19 @@ export class Relocalizer {
     return this.entries.length;
   }
 
-  /** Feed one live frame embedding + the device heading at capture time. */
+  /**
+   * Feed one live frame embedding + the device heading at capture time.
+   *
+   * `live` (optional): the frame's column profile + the capture-space
+   * horizontal FOV. With it, Δ is refined WITHIN the matched frame by
+   * cross-correlation — without it, Δ is quantized to the sweep's frame grid
+   * (~±14° worst case), which is only good enough to know WHERE you are,
+   * not to draw a pin.
+   */
   observe(
     vec: Float32Array,
     deviceHeading: number,
+    live?: { profile: Float32Array; hFovDeg: number },
   ): { surveyId: string; delta: number; score: number } | null {
     if (!this.entries.length) return null;
     const q = l2Normalize(vec);
@@ -69,7 +90,19 @@ export class Relocalizer {
       }
       if (this.pendingCount < 2) return this.current;
     }
-    const delta = ((deviceHeading - best.e.frameHeading + 540) % 360) - 180;
+    // Coarse: assume the live view IS the matched frame's direction. Fine:
+    // measure how far the live view is rotated within it. Panning right
+    // shifts content left, hence the sign flip (see imageShift).
+    let frameRelRotation = 0;
+    if (live && best.e.profile) {
+      const shift = profileShift(best.e.profile, live.profile);
+      if (shift && shift.confidence >= SHIFT_MIN_CONFIDENCE) {
+        const deg = -shiftDegrees(shift.shiftBins, live.hFovDeg);
+        if (Math.abs(deg) <= SHIFT_MAX_DEG) frameRelRotation = deg;
+      }
+    }
+    const delta =
+      ((deviceHeading - (best.e.frameHeading + frameRelRotation) + 540) % 360) - 180;
     const arr = this.deltas.get(best.e.surveyId) ?? [];
     arr.push(delta);
     if (arr.length > 7) arr.shift();

@@ -175,7 +175,8 @@ export default function AppShell({ screens, initialTab }: AppShellProps) {
             className={screen.id === activeScreen.id ? 'dock-item active' : 'dock-item'}
             onClick={() => select(screen.id)}
           >
-            <span className="dock-icon">
+            {/* decorative: the label below is the button's accessible name */}
+            <span className="dock-icon" aria-hidden="true">
               {screen.icon ?? <span className="dock-letter">{screen.label.slice(0, 1)}</span>}
             </span>
             <span className="dock-label">{screen.label}</span>

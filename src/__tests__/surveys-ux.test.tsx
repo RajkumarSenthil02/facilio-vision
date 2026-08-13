@@ -130,11 +130,16 @@ describe('survey detail — bottom sheet', () => {
       'btn-cta',
     );
 
-    // markers: 🔧 asset / 📝 note, name + bearing/pitch meta
+    // markers carry DSM ICONS, never emoji (emoji cannot inherit colour and
+    // render differently per platform)
     const markers = container.querySelectorAll('.sv-marker');
     expect(markers).toHaveLength(2);
-    expect(markers[0].querySelector('.sv-marker-icon')!.textContent).toBe('🔧');
-    expect(markers[1].querySelector('.sv-marker-icon')!.textContent).toBe('📝');
+    for (const marker of markers) {
+      const icon = marker.querySelector('.sv-marker-icon svg');
+      expect(icon).not.toBeNull();
+      expect(icon!.getAttribute('stroke')).toBe('currentColor');
+    }
+    expect(container.textContent).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
     // sweep frame 0 is 100° and the marker sits 30° off it → 130° absolute
     expect(markers[0].querySelector('.sv-marker-meta')!.textContent).toBe(
       'bearing 130° · pitch -27°',

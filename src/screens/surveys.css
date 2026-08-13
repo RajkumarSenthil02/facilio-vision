@@ -52,7 +52,7 @@
 
 .sv-h1 {
   margin: 0;
-  font-size: 24px;
+  font-size: 20px;
   line-height: 30px;
   font-weight: 700;
   color: var(--ink-900);
@@ -64,10 +64,10 @@
   align-items: center;
   gap: 6px;
   max-width: 60%;
-  min-height: 44px;
+  height: 32px;
   padding: 0 14px;
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--ink-700);
   font: 600 15px/1 var(--font-sans);

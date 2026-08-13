@@ -15,6 +15,7 @@ import { appStore } from '../api/appStore';
 import type { Survey, SurveyMarker } from '../api/types';
 import { QrCode, printQrLabel } from '../ar/QrCode';
 import Sheet from '../components/Sheet';
+import Icon from '../components/Icon';
 import LocationPicker from '../components/LocationPicker';
 import { useLocationScope } from '../state/LocationContext';
 import { getCodeEntry, linkCode, unlinkCode } from '../vision/codes';
@@ -72,7 +73,7 @@ export default function SurveysScreen() {
         <div className="sv-cta-row">
           {/* the authoring entry point — the AR survey overlay */}
           <button className="btn-cta" onClick={() => setAuthoring(true)}>
-            <span aria-hidden="true">🧭</span> New survey
+            <Icon name="compass" /> New survey
           </button>
         </div>
       </header>
@@ -287,7 +288,7 @@ function SurveyDetail({ survey, onBack }: { survey: Survey; onBack: () => void }
       {survey.markers.map((marker) => (
         <div className="sv-marker" key={marker.id}>
           <span className="sv-marker-icon" aria-hidden="true">
-            {marker.assetId ? '🔧' : '📝'}
+            <Icon name={marker.assetId ? 'wrench' : 'note'} size={18} />
           </span>
           <span className="sv-marker-main">
             <span className="sv-marker-name">{marker.label}</span>

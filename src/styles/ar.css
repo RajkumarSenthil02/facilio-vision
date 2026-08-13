@@ -114,13 +114,13 @@
 }
 
 .ar-rail-btn {
-  width: 46px;
-  height: 46px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   background: rgba(16, 24, 38, 0.8);
   color: #fff;
   cursor: pointer;
@@ -431,7 +431,7 @@
 
 .ar-action {
   flex: 1;
-  min-height: 46px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;

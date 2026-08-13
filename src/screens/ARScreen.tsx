@@ -36,6 +36,7 @@ import { CameraView } from '../components/camera/CameraView';
 import { CodeSheet } from '../components/camera/CodeSheets';
 import { useCamera } from '../components/camera/useCamera';
 import Sheet from '../components/Sheet';
+import Icon from '../components/Icon';
 import LocationPicker from '../components/LocationPicker';
 import VoiceSheet from './VoiceSheet';
 import { useScanLoop } from '../vision/scanLoop';
@@ -739,7 +740,7 @@ export default function ARScreen() {
             className="ar-action ar-action-primary"
             onClick={() => setSheet(activeSurvey ? 'note' : 'stand')}
           >
-            <span aria-hidden="true">📌</span> Pin note here
+            <Icon name="pin" /> Pin note here
           </button>
           <button
             className={sheet === 'markers' ? 'ar-action ar-action-secondary active' : 'ar-action ar-action-secondary'}

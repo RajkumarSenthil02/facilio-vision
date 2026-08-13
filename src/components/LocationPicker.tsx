@@ -46,7 +46,6 @@ export default function LocationPicker() {
         label="Building"
         value={String(scope.buildingId ?? ALL)}
         placeholder="All buildings"
-        disabled={!scope.siteId}
         options={[
           { value: ALL, label: 'All buildings' },
           ...buildingOptions.map((b) => ({ value: String(b.id), label: b.name })),
@@ -65,7 +64,6 @@ export default function LocationPicker() {
         label="Floor"
         value={String(scope.floorId ?? ALL)}
         placeholder="All floors"
-        disabled={!scope.buildingId}
         options={[
           { value: ALL, label: 'All floors' },
           ...floorOptions.map((f) => ({ value: String(f.id), label: f.name })),

@@ -6,6 +6,7 @@ import { installGlobalErrorHandlers, onGlobalError } from './shell/globalErrors'
 import { createAppQueryClient, createPersistOptions } from './api/queryClient';
 import { onQueueChange, flushQueue } from './api/offlineQueue';
 import { onAppStoreStatus } from './api/appStore';
+import { isMockMode } from './api/provider';
 import { LocationProvider } from './state/LocationContext';
 import {
   AppShell,
@@ -72,6 +73,24 @@ export default function App() {
             <span>{globalError}</span>
             <button onClick={() => setGlobalError(null)} aria-label="Dismiss">
               ×
+            </button>
+          </div>
+        )}
+        {/* Demo data is indistinguishable from the real org's seeded data by
+            name, and ?mock=1 survives every navigation — so say so, loudly and
+            permanently, rather than letting someone review fixtures as if they
+            were live records. */}
+        {isMockMode() && (
+          <div className="demo-banner" role="status">
+            <span>Demo data — not your live Facilio records</span>
+            <button
+              onClick={() => {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('mock');
+                window.location.replace(url.toString());
+              }}
+            >
+              Use live data
             </button>
           </div>
         )}

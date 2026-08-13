@@ -1,0 +1,214 @@
+/* Bottom sheet — anatomy matched to the reference app:
+   grab handle, title, internally-scrolling body, sticky footer. */
+
+.sheet-root {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  background: rgba(11, 18, 32, 0.42);
+  animation: sheetFade var(--dur-base) var(--ease-standard);
+}
+
+.sheet-panel {
+  position: relative;
+  background: var(--bg-surface);
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -12px 40px rgba(40, 54, 72, 0.22);
+  max-height: 88%;
+  display: flex;
+  flex-direction: column;
+  animation: sheetUp var(--dur-slow) var(--ease-standard);
+  transition: transform var(--dur-fast) var(--ease-standard);
+  padding-bottom: var(--safe-b);
+}
+
+.sheet-panel.tall { height: 88%; }
+
+.sheet-grip {
+  width: 44px;
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background: var(--ink-200);
+  margin: 10px auto 4px;
+  flex: none;
+}
+
+.sheet-title {
+  margin: 0;
+  padding: 6px 20px 12px;
+  font-size: 19px;
+  line-height: 26px;
+  font-weight: 700;
+  color: var(--ink-900);
+  flex: none;
+}
+
+.sheet-body {
+  flex: 1;
+  min-height: 0;
+  padding: 0 20px 16px;
+}
+
+.sheet-footer {
+  flex: none;
+  padding: 12px 20px calc(12px + var(--safe-b));
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  display: flex;
+  gap: 10px;
+}
+
+@keyframes sheetUp {
+  from { transform: translateY(14%); opacity: 0.6; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes sheetFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-panel, .sheet-backdrop { animation: none; }
+}
+
+/* ---- mobile-native primitives shared by the screens ---- */
+
+/* Full-width gradient CTA, as the reference uses for New survey / Start sweep */
+.btn-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--brand-indigo-600) 0%, var(--blue-500) 100%);
+  color: #fff;
+  font: 600 16px/1 var(--font-sans);
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(60, 34, 157, 0.28);
+}
+
+.btn-cta:active { transform: translateY(1px); }
+.btn-cta:disabled { opacity: 0.55; box-shadow: none; }
+
+.btn-quiet {
+  min-height: 52px;
+  padding: 0 18px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  color: var(--ink-900);
+  font: 600 15px/1 var(--font-sans);
+  cursor: pointer;
+}
+
+.btn-danger-outline {
+  width: 100%;
+  min-height: 50px;
+  border: 1px solid var(--danger-500);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--danger-500);
+  font: 600 15px/1 var(--font-sans);
+  cursor: pointer;
+}
+
+/* Section label + action row: "ROUNDS (0)   [New round]" */
+.section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 22px 0 10px;
+}
+
+.section-label {
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+  font-weight: 600;
+}
+
+/* Explanatory empty card, centred grey copy like the reference */
+.empty-card {
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  padding: 28px 24px;
+  text-align: center;
+  color: var(--ink-500);
+  font-size: 15px;
+  line-height: 23px;
+  background: var(--bg-surface);
+}
+
+/* List row card: title + meta line, optional trailing badge */
+.row-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  padding: 14px 16px;
+  cursor: pointer;
+  min-height: 64px;
+}
+
+.row-card:active { background: var(--ink-050); }
+.row-card-title { font-size: 16px; font-weight: 600; color: var(--ink-900); }
+.row-card-meta { font-size: 13px; color: var(--ink-500); margin-top: 3px; }
+
+.row-badge {
+  flex: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--ink-100);
+  color: var(--ink-600);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.row-badge.ok { background: var(--success-050); color: var(--success-700); }
+
+/* Info table: Location / Surveyed / Sweep */
+.info-table {
+  width: 100%;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  overflow: hidden;
+  border-collapse: collapse;
+}
+
+.info-table tr + tr { border-top: 1px solid var(--border-subtle); }
+.info-table th {
+  text-align: left;
+  padding: 14px 16px;
+  color: var(--ink-500);
+  font-weight: 400;
+  font-size: 15px;
+  white-space: nowrap;
+}
+.info-table td {
+  padding: 14px 16px;
+  color: var(--ink-900);
+  font-size: 15px;
+  text-align: right;
+}

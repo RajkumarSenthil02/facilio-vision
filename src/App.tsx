@@ -37,11 +37,11 @@ installGlobalErrorHandlers();
 // hidden screens surface in the sidebar under Admin (that's the web layout's
 // whole point).
 const SCREENS: ShellScreen[] = [
-  { id: 'ar', label: 'AR', icon: <CameraIcon />, visible: true, component: ARScreen },
+  { id: 'ar', label: 'AR', icon: <CameraIcon />, visible: true, bleed: true, component: ARScreen },
   { id: 'surveys', label: 'Surveys', icon: <MapPinIcon />, visible: true, component: SurveysScreen },
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutGridIcon />, visible: false, component: DashboardScreen },
   { id: 'portfolio', label: 'Portfolio', icon: <HomeIcon />, visible: false, component: PortfolioScreen },
-  { id: 'capture', label: 'Capture', icon: <CameraIcon />, visible: false, component: CaptureScreen },
+  { id: 'capture', label: 'Capture', icon: <CameraIcon />, visible: false, bleed: true, component: CaptureScreen },
   { id: 'rooms', label: 'Rooms', icon: <HomeIcon />, visible: false, component: RoomsScreen },
   { id: 'voice', label: 'Voice', icon: <MicIcon />, visible: false, component: VoiceSheet },
   { id: 'rounds', label: 'Rounds', icon: <RouteIcon />, visible: false, component: RoundsScreen },

@@ -93,7 +93,11 @@ export default function ARScreen() {
   const { scope, names } = useLocationScope();
   const queryClient = useQueryClient();
 
-  const [arOn, setArOn] = useState(false);
+  // The camera is LIVE ON OPEN — this is a camera-first app, not a page with a
+  // camera on it. getUserMedia may be called without a gesture (the browser
+  // shows its own permission prompt); only iOS motion-sensor access needs one,
+  // which is handled by the first-gesture effect below.
+  const [arOn, setArOn] = useState(true);
   const [presence, setPresence] = useState<Presence | null>(null);
   const [focusAssetId, setFocusAssetId] = useState<number | null>(null);
   const [guide, setGuide] = useState<{ heading: number; name: string } | null>(null);
@@ -313,10 +317,29 @@ export default function ARScreen() {
 
   // ---- actions ----
 
+  // iOS gates motion sensors behind a user gesture. The camera does not need
+  // one, so rather than holding the whole stage hostage to a tap, we arm the
+  // sensors on the FIRST touch anywhere in the stage — by which time the user
+  // is already looking at a live camera.
+  useEffect(() => {
+    if (!arOn) return;
+    let done = false;
+    const arm = () => {
+      if (done) return;
+      done = true;
+      void enableArOrientation();
+    };
+    window.addEventListener('pointerdown', arm, { once: true, passive: true });
+    window.addEventListener('touchstart', arm, { once: true, passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', arm);
+      window.removeEventListener('touchstart', arm);
+    };
+  }, [arOn]);
+
   const toggleAr = () => {
     const next = !arOn;
     setArOn(next);
-    // iOS gates motion sensors behind a user gesture — THIS click is it.
     if (next) void enableArOrientation();
     if (!next) {
       setGuide(null);

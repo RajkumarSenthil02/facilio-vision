@@ -14,13 +14,54 @@
 
 * { box-sizing: border-box; }
 
+/* ---------------------------------------------------------------------------
+   Mobile viewport discipline.
+
+   100vh on iOS Safari is the LARGE viewport — it excludes the browser chrome,
+   so a 100vh app is taller than what you can see: the bottom nav lands under
+   the fold and the whole page scrolls. 100dvh tracks the visible area live.
+   --app-h is the single source of height for every full-screen surface.
+
+   The page itself NEVER scrolls; panes scroll internally. That is what makes
+   it feel native instead of like a web page in a browser.
+   --------------------------------------------------------------------------- */
+:root {
+  --app-h: 100vh; /* fallback for old engines */
+  --nav-h: 56px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+}
+
+@supports (height: 100dvh) {
+  :root { --app-h: 100dvh; }
+}
+
+html, body, #root {
+  height: var(--app-h);
+  overflow: hidden;
+  overscroll-behavior: none; /* kill rubber-band / pull-to-refresh */
+}
+
 body {
   margin: 0;
   background: var(--bg-app);
   color: var(--text-primary);
   font: 400 var(--fs-body) / var(--lh-body) var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
 }
+
+/* Any scrollable pane opts in — momentum + contained overscroll. */
+.scroll-y {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Touch targets: the reference app never goes below 44px on tappables. */
+button, .tap { touch-action: manipulation; }
 
 .shell {
   max-width: 960px;
@@ -68,7 +109,12 @@ button:hover { border-color: var(--muted); }
 
 /* ---- app frame ---- */
 
-.app { min-height: 100vh; }
+.app {
+  height: var(--app-h);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 
 /* Compact layout when running inside the Facilio host (iframe or native webview) */
 .app.embedded .shell { padding: 12px 16px; }

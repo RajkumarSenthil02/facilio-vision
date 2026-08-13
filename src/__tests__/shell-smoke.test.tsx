@@ -22,8 +22,9 @@ describe('shell-smoke', () => {
     expect(screen.queryByRole('tab', { name: 'Diagnostics' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Boom' })).not.toBeInTheDocument();
 
-    // Default tab renders the AR stage (camera + AR start on the toggle gesture)
-    expect(await screen.findByRole('button', { name: 'AR off' })).toBeInTheDocument();
+    // Default tab renders the AR stage with the camera ALREADY live —
+    // camera-first: no tap required to see through the lens.
+    expect(await screen.findByRole('button', { name: 'AR on' })).toBeInTheDocument();
   });
 
   it('switches tabs and rewrites only the tab param', async () => {

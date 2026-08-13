@@ -1,5 +1,5 @@
 // Design-system smoke for the Dock HUD stage, now over the REAL camera:
-// the zones render, the AR toggle is the gesture that starts the camera and
+// the zones render, the camera is live on open (camera-first), and
 // the motion sensors, and the marker board minimizes/restores (persisted).
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -70,18 +70,17 @@ describe('AR HUD (mock mode)', () => {
     expect(await screen.findByText('All sites')).toBeInTheDocument();
     // Zone B: exactly ONE state chip
     expect(container.querySelectorAll('.ar-state')).toHaveLength(1);
-    expect(screen.getByText('AR paused')).toBeInTheDocument();
-    // Zone C: the AR toggle
-    expect(screen.getByRole('button', { name: 'AR off' })).toBeInTheDocument();
+    // Zone C: the AR toggle, ON by default
+    expect(screen.getByRole('button', { name: 'AR on' })).toBeInTheDocument();
     // Zone D + F
     expect(container.querySelector('.ar-crosshair')).not.toBeNull();
     expect(screen.getByRole('button', { name: /Markers/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Raise fault/ })).toBeInTheDocument();
-    // the camera only starts on the gesture — no feed surface yet
-    expect(container.querySelector('.fv-cam')).toBeNull();
+    // camera-first: the feed surface is mounted without any tap
+    await waitFor(() => expect(container.querySelector('.fv-cam')).not.toBeNull());
   });
 
-  it('the AR toggle is the user gesture that starts the camera AND the sensors', async () => {
+  it('camera is live on open; the first touch arms the iOS motion sensors', async () => {
     const requestPermission = vi.fn(async () => 'granted');
     (globalThis as { DeviceOrientationEvent?: unknown }).DeviceOrientationEvent = {
       requestPermission,
@@ -89,19 +88,20 @@ describe('AR HUD (mock mode)', () => {
     const user = userEvent.setup();
     const { container } = bootAt('?mock=1&tab=ar');
 
-    await user.click(await screen.findByRole('button', { name: 'AR off' }));
-
-    expect(screen.getByRole('button', { name: 'AR on' })).toBeInTheDocument();
-    // iOS motion gate asked inside the click
-    expect(requestPermission).toHaveBeenCalledTimes(1);
-    // camera surface mounted INSIDE the stage, with its own unavailable state
-    const stage = container.querySelector('.ar-stage') as HTMLElement;
+    // No tap needed: the feed surface mounts inside the stage on open.
+    const stage = (await screen.findByRole('button', { name: 'AR on' })).closest(
+      '.ar-stage',
+    ) as HTMLElement;
     await waitFor(() => expect(stage.querySelector('.fv-cam')).not.toBeNull());
     expect(within(stage).getByText(/Camera unavailable here/)).toBeInTheDocument();
     // the app chrome is never owned by the stage
     expect(screen.getByRole('tab', { name: 'Surveys' })).toBeInTheDocument();
 
-    // turning AR back off tears the feed down again
+    // iOS gates MOTION (not camera) behind a gesture — the first touch arms it
+    await user.click(stage);
+    await waitFor(() => expect(requestPermission).toHaveBeenCalled());
+
+    // toggling off still tears the feed down
     await user.click(screen.getByRole('button', { name: 'AR on' }));
     expect(container.querySelector('.fv-cam')).toBeNull();
     expect(screen.getByText('AR paused')).toBeInTheDocument();
@@ -112,7 +112,7 @@ describe('AR HUD (mock mode)', () => {
     const user = userEvent.setup();
     bootAt('?mock=1&tab=ar');
 
-    await user.click(await screen.findByRole('button', { name: 'AR off' }));
+    await screen.findByRole('button', { name: 'AR on' });
     await act(async () => {
       scanBus.emit?.('ws-01-code');
     });

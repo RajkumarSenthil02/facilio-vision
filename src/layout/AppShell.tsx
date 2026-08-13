@@ -26,6 +26,8 @@ export interface ShellScreen {
   icon?: ReactNode;
   /** Hidden screens are reachable by ?tab= and join mobile/embedded nav only while active. */
   visible: boolean;
+  /** Camera-first screens own the pane: no internal scroll, full bleed. */
+  bleed?: boolean;
   component: ComponentType;
 }
 
@@ -165,7 +167,9 @@ export default function AppShell({ screens, initialTab }: AppShellProps) {
 
   return (
     <div className="as-mobile">
-      <main className="as-mobile-main">{body}</main>
+      {/* Camera-first screens own the whole pane (no scroll); everything
+          else scrolls internally. */}
+      <main className={activeScreen.bleed ? 'as-mobile-main bleed' : 'as-mobile-main'}>{body}</main>
       <nav className="as-dock" role="tablist" aria-label="Dock">
         {joinNav.map((screen) => (
           <button

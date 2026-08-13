@@ -13,7 +13,7 @@
   grid-template-areas:
     'topbar topbar'
     'sidebar main';
-  min-height: 100vh;
+  height: var(--app-h);
   background: var(--bg-app);
 }
 
@@ -87,25 +87,39 @@
 .nav-item.active { background: var(--blue-025); color: var(--blue-600); }
 .nav-item svg { flex: 0 0 auto; }
 
-.as-main { grid-area: main; min-width: 0; }
+.as-main { grid-area: main; min-width: 0; overflow-y: auto; }
 
 /* ---- mobile camera-first frame: content + 52px bottom icon dock ---- */
 
-.as-mobile { min-height: 100vh; background: var(--bg-app); }
-
-.as-mobile-main {
-  /* keep the dock from covering the last row of content */
-  padding-bottom: calc(52px + env(safe-area-inset-bottom, 0px) + 8px);
+.as-mobile {
+  /* App-height flex column: the DOCK is a flex row, the MAIN pane scrolls.
+     Nothing is position:fixed and nothing relies on page scroll — that is
+     what stops the "bottom bar under the fold" bug on iOS. */
+  height: var(--app-h);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app);
+  overflow: hidden;
 }
 
+.as-mobile-main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Screens that own the whole viewport (camera/AR) opt out of padding. */
+.as-mobile-main.bleed { overflow: hidden; }
+
 .as-dock {
-  position: fixed;
-  inset: auto 0 0 0;
+  flex: none;
   z-index: 30;
   display: flex;
   align-items: stretch;
-  height: calc(52px + env(safe-area-inset-bottom, 0px));
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  height: calc(var(--nav-h) + var(--safe-b));
+  padding-bottom: var(--safe-b);
   background: var(--bg-surface);
   border-top: 1px solid var(--ink-200);
 }
@@ -130,7 +144,7 @@
 .dock-item.active { color: var(--blue-600); }
 
 .dock-label {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1;
   font-weight: 500;
   max-width: 100%;
@@ -139,7 +153,8 @@
   white-space: nowrap;
 }
 
-.dock-icon { display: grid; place-items: center; height: 20px; }
+.dock-icon { display: grid; place-items: center; height: 24px; }
+.dock-icon svg { width: 24px; height: 24px; }
 
 .dock-letter {
   display: grid;

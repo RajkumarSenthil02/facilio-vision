@@ -77,11 +77,19 @@ async function bootLocalized() {
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
   window.history.replaceState({}, '', '/?mock=1&tab=ar');
   render(<App />);
-  await user.click(await screen.findByRole('button', { name: 'AR off' }));
-  await act(async () => {
-    scanBus.emit?.('ws-01-code');
-  });
-  await screen.findByText('Localized · WS-01 · QR');
+  // AR is live on open now; just wait for the stage.
+  await screen.findByRole('button', { name: 'AR on' });
+  // The camera no longer waits on a tap, so the scan can fire before the
+  // surveys query settles — re-emit until the standpoint is recognised.
+  await waitFor(
+    async () => {
+      await act(async () => {
+        scanBus.emit?.('ws-01-code');
+      });
+      screen.getByText('Localized · WS-01 · QR');
+    },
+    { timeout: 4000 },
+  );
   return user;
 }
 

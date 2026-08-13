@@ -57,12 +57,13 @@ function seed() {
   );
 }
 
-/** Boot the AR tab, turn AR on, scan the standpoint sticker. */
+/** Boot the AR tab (camera live on open) and scan the standpoint sticker. */
 async function standAtStandpoint() {
   const user = userEvent.setup();
   window.history.replaceState({}, '', '/?mock=1&tab=ar');
   render(<App />);
-  await user.click(await screen.findByRole('button', { name: 'AR off' }));
+  // AR is live on open now; just wait for the stage.
+  await screen.findByRole('button', { name: 'AR on' });
   await act(async () => {
     scanBus.emit?.(SURVEY.qrCode as string);
   });

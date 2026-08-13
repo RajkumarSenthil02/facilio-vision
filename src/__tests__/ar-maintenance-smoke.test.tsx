@@ -111,13 +111,15 @@ describe('AR maintenance loop (mock mode)', () => {
     await user.click(await within(panel).findByRole('option', { name: 'Closed' }));
     await waitFor(() => expect(panel.querySelector('.badge')).toHaveTextContent('Closed'));
 
-    // pin a note at this standpoint for whoever comes next
-    await user.click(screen.getByRole('button', { name: /Pin note/ }));
+    // pin a note at this standpoint for whoever comes next: "Pin here" freezes
+    // the aim, THEN asks which module this is
+    await user.click(screen.getByRole('button', { name: /Pin here/ }));
+    await user.click(await screen.findByRole('button', { name: /Note.*next technician/s }));
     await user.type(
       screen.getByRole('textbox', { name: /Note/ }),
       'Left the isolation valve half open',
     );
-    await user.click(screen.getByRole('button', { name: 'Save note' }));
+    await user.click(screen.getByRole('button', { name: 'Pin note' }));
     expect(
       await screen.findByRole('button', { name: /Left the isolation valve half open/ }),
     ).toBeInTheDocument();

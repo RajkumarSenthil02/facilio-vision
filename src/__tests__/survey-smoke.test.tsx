@@ -132,12 +132,13 @@ describe('presence (component)', () => {
     seed(makeSurvey());
     const user = await bootLocalized();
 
-    await user.click(screen.getByRole('button', { name: /Pin note/ }));
+    await user.click(screen.getByRole('button', { name: /Pin here/ }));
+    await user.click(await screen.findByRole('button', { name: /Note.*next technician/s }));
     await user.type(
       screen.getByRole('textbox', { name: /Note/ }),
       'Filter housing rattles at full speed',
     );
-    await user.click(screen.getByRole('button', { name: 'Save note' }));
+    await user.click(screen.getByRole('button', { name: 'Pin note' }));
 
     // the survey list refetched under us — the standpoint must NOT be evicted
     await waitFor(() =>

@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { provider, isMockMode } from '../api/provider';
+import DsSelect from '../components/DsSelect';
 import { appStore } from '../api/appStore';
+import {
+  DEFAULT_PLACE_ASSET_POLICY,
+  loadPlaceAssetPolicy,
+  savePlaceAssetPolicy,
+  type PlaceAssetPolicy,
+} from '../api/permissions';
 import { useSites } from '../api/hooks';
 import { detectEmbed } from '../shell/embed';
 import {
@@ -292,6 +299,78 @@ function AgentsCard() {
   );
 }
 
+/**
+ * Who may place ASSET markers. Notes, findings and work orders stay open to
+ * everyone doing the job — an asset pin is a portfolio claim that later scans
+ * and routes trust, so it can be narrowed to named people.
+ */
+function PlaceAssetPolicyCard() {
+  const [policy, setPolicy] = useState<PlaceAssetPolicy>(DEFAULT_PLACE_ASSET_POLICY);
+  const [emails, setEmails] = useState('');
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    void loadPlaceAssetPolicy().then((p) => {
+      setPolicy(p);
+      setEmails(p.emails.join('\n'));
+    });
+  }, []);
+
+  const save = async (next: PlaceAssetPolicy) => {
+    setPolicy(next);
+    try {
+      await savePlaceAssetPolicy(next);
+      setStatus('Saved');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Could not save');
+    }
+  };
+
+  return (
+    <div className="kit-card">
+      <div className="kit-card-hd">
+        <h3>Who can place assets</h3>
+        {status && <span className="muted small">{status}</span>}
+      </div>
+      <div className="kit-card-bd">
+        <p className="muted small" style={{ marginTop: 0 }}>
+          Pinning a note, finding or work order is open to anyone doing the job. Placing an asset
+          marker says where that asset physically is — every later scan and route trusts it.
+        </p>
+        <DsSelect
+          label="Allowed"
+          value={policy.allowAll ? 'all' : 'listed'}
+          options={[
+            { value: 'all', label: 'Anyone signed in' },
+            { value: 'listed', label: 'Only these people' },
+          ]}
+          onChange={(v: string) => void save({ ...policy, allowAll: v === 'all' })}
+        />
+        {!policy.allowAll && (
+          <label className="field" style={{ marginTop: 10 }}>
+            <span>Emails, one per line</span>
+            <textarea
+              rows={4}
+              value={emails}
+              onChange={(e) => setEmails(e.target.value)}
+              onBlur={() =>
+                void save({
+                  ...policy,
+                  emails: emails
+                    .split(/[\n,]/)
+                    .map((e) => e.trim())
+                    .filter(Boolean),
+                })
+              }
+              placeholder="lead@facilio.com"
+            />
+          </label>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DangerZoneCard() {
   const [done, setDone] = useState<string | null>(null);
 
@@ -334,6 +413,7 @@ export default function SettingsScreen() {
       <SiteGeoCard />
       <RecognitionIndexCard />
       <AgentsCard />
+      <PlaceAssetPolicyCard />
       <DangerZoneCard />
     </section>
   );

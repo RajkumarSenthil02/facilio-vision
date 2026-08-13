@@ -91,7 +91,7 @@ describe('AR HUD — mobile-native stage (mock mode)', () => {
     expect(container.querySelectorAll('.ar-state')).toHaveLength(1);
 
     // bottom action row: primary + secondary, sized by class contract
-    const primary = screen.getByRole('button', { name: /Pin note here/ });
+    const primary = screen.getByRole('button', { name: /Pin here/ });
     const secondary = screen.getByRole('button', { name: /Markers/ });
     expect(primary).toHaveClass('ar-action', 'ar-action-primary');
     expect(secondary).toHaveClass('ar-action', 'ar-action-secondary');

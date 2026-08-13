@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { provider } from '../api/provider';
+import { loadPlaceAssetPolicy, policyAllows } from '../api/permissions';
 import { appStore } from '../api/appStore';
 import { draftWorkOrder } from '../api/agents';
 import { useAsset, useAssetSearch } from '../api/hooks';
@@ -44,7 +45,7 @@ import { describeEntry, resolveCode } from '../vision/codes';
 import { stampStopByCode } from '../rounds/roundsStore';
 import WorkOrderPanel from '../components/WorkOrderPanel';
 import { useGeoFix } from '../hooks/useGeoFix';
-import { arOrientation, enableArOrientation } from '../hooks/useHeading';
+import { arOrientation, enableArOrientation, placementOrientation } from '../hooks/useHeading';
 import { indoorLegs, mapsDirectionsUrl, type WayLeg } from '../wayfinding/legs';
 import '../styles/ar.css';
 import '../ar/arspace.css';
@@ -96,7 +97,33 @@ interface FaultDraft {
   fromPhoto: boolean;
 }
 
-type SheetId = 'markers' | 'note' | 'fault' | 'legs' | 'site' | 'stand' | 'voice' | null;
+type SheetId =
+  | 'markers'
+  | 'pin'        // module picker: what am I pinning here?
+  | 'pin-form'   // the chosen module's form
+  | 'fault'
+  | 'legs'
+  | 'site'
+  | 'stand'
+  | 'voice'
+  | null;
+
+/** What a pin becomes. Asset is gated — see src/api/permissions.ts. */
+export type PinKind = 'workorder' | 'finding' | 'note' | 'asset';
+
+/**
+ * The aim, captured the instant "Pin here" is tapped.
+ *
+ * It used to be read at SAVE time, so tapping, typing a note and lowering the
+ * phone pinned the marker wherever the phone had ended up. Freezing at the tap
+ * is the whole reason the point lands where the technician was looking.
+ */
+interface PinPoint {
+  /** Relative to sweep frame 0, Δ already removed. */
+  rel: number;
+  pitch: number;
+  known: boolean;
+}
 
 /**
  * The shared Sheet primitive, named for assistive tech.
@@ -166,6 +193,10 @@ export default function ARScreen() {
   const [hint, setHint] = useState<string | null>(null);
   const [minimized, setMinimized] = useState(false);
   const [noteText, setNoteText] = useState('');
+  const [pinPoint, setPinPoint] = useState<PinPoint | null>(null);
+  const [pinKind, setPinKind] = useState<PinKind>('note');
+  const [pinBusy, setPinBusy] = useState(false);
+  const [canPlaceAsset, setCanPlaceAsset] = useState(false);
   const [legs, setLegs] = useState<WayLeg[]>([]);
   const [fault, setFault] = useState<FaultDraft>({
     subject: '',
@@ -175,6 +206,26 @@ export default function ARScreen() {
   });
 
   const relocRef = useRef<Relocalizer>(new Relocalizer());
+
+  // Placing an ASSET declares where the portfolio physically lives, so it is
+  // gated; notes/findings/work orders are ordinary field work.
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      try {
+        const [policy, me] = await Promise.all([
+          loadPlaceAssetPolicy(),
+          provider.getCurrentUser(),
+        ]);
+        if (live) setCanPlaceAsset(policyAllows(policy, me?.user.email));
+      } catch {
+        if (live) setCanPlaceAsset(false);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, []);
   const getFix = useGeoFix(arOn);
 
   const camera = useCamera(arOn);
@@ -465,27 +516,87 @@ export default function ARScreen() {
     })();
   };
 
-  const pinNote = async () => {
-    const text = noteText.trim();
-    if (!activeSurvey || !text) return;
-    const orient = arOrientation();
+  /**
+   * "Pin here" — freeze the aim NOW, then ask what it is.
+   *
+   * The median-of-recent reading is used rather than one instant, because a
+   * marker is written once and lives forever (see placementOrientation).
+   */
+  const startPin = () => {
+    if (!activeSurvey) {
+      setHint('Stand at a standpoint first — a pin belongs to a survey');
+      return;
+    }
     const base = activeSurvey.sweep[0]?.heading ?? 0;
     const delta = presence?.delta ?? 0;
-    // stored RELATIVE to sweep frame 0, with the Δ correction removed again
-    const rel = ((orient.ok ? orient.heading : base) - delta - base + 360) % 360;
-    const marker: SurveyMarker = {
-      id: `m-${Date.now().toString(36)}-${Math.floor(Math.random() * 1296).toString(36)}`,
-      label: text.slice(0, 60),
-      note: text,
-      heading: rel,
-      pitch: orient.ok ? orient.pitch : 0,
-    };
+    const aim = placementOrientation();
+    setPinPoint(
+      aim
+        ? { rel: ((aim.heading - delta - base) % 360 + 360) % 360, pitch: aim.pitch, known: true }
+        : // no compass: a spread suggestion the form makes editable
+          { rel: (activeSurvey.markers.length * 40) % 360, pitch: 0, known: false },
+    );
+    setNoteText('');
+    setSheet('pin');
+  };
+
+  const addMarkerToSurvey = async (marker: SurveyMarker) => {
+    if (!activeSurvey) return;
     const next: Survey = { ...activeSurvey, markers: [...activeSurvey.markers, marker] };
     await appStore.kvPut('surveys', `survey.${activeSurvey.id}`, next);
     await queryClient.invalidateQueries({ queryKey: ['surveys'] });
-    setNoteText('');
-    setSheet(null);
-    setHint('Note pinned at this standpoint');
+  };
+
+  const newMarkerId = () =>
+    `m-${Date.now().toString(36)}-${Math.floor(Math.random() * 1296).toString(36)}`;
+
+  /** Commits the pin as the chosen module, at the FROZEN point. */
+  const commitPin = async (asset?: Asset) => {
+    const text = noteText.trim();
+    if (!activeSurvey || !pinPoint || pinBusy) return;
+    if (pinKind !== 'asset' && !text) return;
+    setPinBusy(true);
+    try {
+      const base: Pick<SurveyMarker, 'heading' | 'pitch'> = {
+        heading: pinPoint.rel,
+        pitch: pinPoint.pitch,
+      };
+
+      if (pinKind === 'asset' && asset) {
+        await addMarkerToSurvey({ ...base, id: newMarkerId(), label: asset.name, assetId: asset.id });
+        setHint(`${asset.name} placed here`);
+      } else if (pinKind === 'workorder') {
+        // A work-order pin creates the REAL record, then anchors to it — a pin
+        // that only looked like a work order would be a lie.
+        const id = await provider.createWorkOrder({
+          subject: text.slice(0, 80),
+          description: text,
+          siteId: scope.siteId,
+          resourceId: focusAssetId ?? undefined,
+        });
+        await addMarkerToSurvey({
+          ...base,
+          id: newMarkerId(),
+          label: text.slice(0, 60),
+          note: text,
+          workOrderId: id,
+        });
+        await queryClient.invalidateQueries({ queryKey: ['workorders'] });
+        setHint(`Work order #${id} raised and pinned here`);
+      } else {
+        const label = pinKind === 'finding' ? `Finding: ${text}` : text;
+        await addMarkerToSurvey({ ...base, id: newMarkerId(), label: label.slice(0, 60), note: text });
+        setHint(pinKind === 'finding' ? 'Finding pinned here' : 'Note pinned here');
+      }
+
+      setNoteText('');
+      setPinPoint(null);
+      setSheet(null);
+    } catch (err) {
+      setHint(err instanceof Error ? err.message : 'Could not pin that');
+    } finally {
+      setPinBusy(false);
+    }
   };
 
   const openFault = () => {
@@ -736,9 +847,9 @@ export default function ARScreen() {
         <div className="ar-actions">
           <button
             className="ar-action ar-action-primary"
-            onClick={() => setSheet(activeSurvey ? 'note' : 'stand')}
+            onClick={() => activeSurvey ? startPin() : setSheet('stand')}
           >
-            <Icon name="pin" /> Pin note here
+            <Icon name="pin" /> Pin here
           </button>
           <button
             className={sheet === 'markers' ? 'ar-action ar-action-secondary active' : 'ar-action ar-action-secondary'}
@@ -838,25 +949,118 @@ export default function ARScreen() {
       </ArSheet>
 
       <ArSheet
-        label="Pin a note"
-        open={sheet === 'note'}
-        title="Pin a note here"
-        onClose={() => setSheet(null)}
+        label="Pin here"
+        open={sheet === 'pin'}
+        title="What are you pinning here?"
+        onClose={() => {
+          setPinPoint(null);
+          setSheet(null);
+        }}
+      >
+        <p className="sv-help" style={{ marginTop: 0 }}>
+          {pinPoint?.known
+            ? 'Direction captured — you can lower the phone to type.'
+            : 'No compass reading, so set the direction on the next screen.'}
+        </p>
+        <div className="ar-pin-kinds">
+          {(
+            [
+              { kind: 'workorder' as const, icon: 'clipboard' as const, label: 'Work order', hint: 'Raises a real work order and pins it' },
+              { kind: 'finding' as const, icon: 'alert' as const, label: 'Finding', hint: 'Something worth recording, no job yet' },
+              { kind: 'note' as const, icon: 'note' as const, label: 'Note', hint: 'For the next technician' },
+              ...(canPlaceAsset
+                ? [{ kind: 'asset' as const, icon: 'wrench' as const, label: 'Place asset', hint: 'Says where this asset physically is' }]
+                : []),
+            ]
+          ).map((option) => (
+            <button
+              key={option.kind}
+              className="ar-pin-kind"
+              onClick={() => {
+                setPinKind(option.kind);
+                setSheet('pin-form');
+              }}
+            >
+              <Icon name={option.icon === 'clipboard' ? 'list' : option.icon} size={20} />
+              <span className="ar-pin-kind-main">
+                <span className="ar-pin-kind-label">{option.label}</span>
+                <span className="ar-pin-kind-hint">{option.hint}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </ArSheet>
+
+      <ArSheet
+        label="Pin details"
+        open={sheet === 'pin-form'}
+        title={
+          pinKind === 'workorder'
+            ? 'New work order here'
+            : pinKind === 'finding'
+              ? 'Record a finding here'
+              : pinKind === 'asset'
+                ? 'Place an asset here'
+                : 'Pin a note here'
+        }
+        onClose={() => setSheet('pin')}
         footer={
-          <button className="btn-cta" disabled={!noteText.trim()} onClick={() => void pinNote()}>
-            Save note
-          </button>
+          pinKind === 'asset' ? undefined : (
+            <button
+              className="btn-cta"
+              disabled={!noteText.trim() || pinBusy}
+              onClick={() => void commitPin()}
+            >
+              {pinBusy
+                ? 'Saving…'
+                : pinKind === 'workorder'
+                  ? 'Raise and pin'
+                  : pinKind === 'finding'
+                    ? 'Pin finding'
+                    : 'Pin note'}
+            </button>
+          )
         }
       >
-        <label className="field">
-          <span>Note</span>
-          <textarea
-            rows={4}
-            value={noteText}
-            onChange={(e) => setNoteText(e.target.value)}
-            placeholder="What should the next technician know?"
-          />
-        </label>
+        {pinPoint && !pinPoint.known && (
+          <label className="field">
+            <span>Direction (0–359°)</span>
+            <input
+              inputMode="numeric"
+              value={String(Math.round(pinPoint.rel))}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                if (Number.isFinite(n)) setPinPoint({ ...pinPoint, rel: ((n % 360) + 360) % 360 });
+              }}
+            />
+          </label>
+        )}
+
+        {pinKind === 'asset' ? (
+          <PinAssetPicker onPick={(asset) => void commitPin(asset)} busy={pinBusy} />
+        ) : (
+          <label className="field">
+            <span>
+              {pinKind === 'workorder'
+                ? 'What needs doing'
+                : pinKind === 'finding'
+                  ? 'What you found'
+                  : 'Note'}
+            </span>
+            <textarea
+              rows={4}
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder={
+                pinKind === 'workorder'
+                  ? 'e.g. Replace the filter on this AHU'
+                  : pinKind === 'finding'
+                    ? 'e.g. Belt showing wear, not urgent'
+                    : 'What should the next technician know?'
+              }
+            />
+          </label>
+        )}
       </ArSheet>
 
       <ArSheet
@@ -960,5 +1164,49 @@ export default function ARScreen() {
         />
       )}
     </div>
+  );
+}
+
+/** Asset search for a gated "Place asset" pin. */
+function PinAssetPicker({
+  onPick,
+  busy,
+}: {
+  onPick: (asset: Asset) => void;
+  busy: boolean;
+}) {
+  const { scope } = useLocationScope();
+  const [text, setText] = useState('');
+  const results = useAssetSearch({ text, scope }, text.trim().length > 0);
+
+  return (
+    <>
+      <label className="field">
+        <span>Search assets</span>
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Type to search…"
+        />
+      </label>
+      <div className="ar-pin-results">
+        {results.data?.slice(0, 20).map((asset) => (
+          <button
+            key={asset.id}
+            className="row-card"
+            disabled={busy}
+            onClick={() => onPick(asset)}
+          >
+            <span className="sv-row-main">
+              <span className="row-card-title">{asset.name}</span>
+              <span className="row-card-meta">{asset.spaceName ?? asset.category ?? `#${asset.id}`}</span>
+            </span>
+          </button>
+        ))}
+        {text.trim() && results.data?.length === 0 && (
+          <p className="sv-help">No assets match that in this scope.</p>
+        )}
+      </div>
+    </>
   );
 }

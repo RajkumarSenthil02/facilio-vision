@@ -202,7 +202,7 @@ describe('new survey point — camera + sheet', () => {
     expect(container.querySelector('select')).toBeNull();
     expect(container.querySelectorAll('.ds-select-btn')).toHaveLength(0);
 
-    const start = screen.getByRole('button', { name: 'Start placing' });
+    const start = screen.getByRole('button', { name: 'Start sweep' });
     expect(start).toHaveClass('btn-cta');
     expect(start).toBeDisabled(); // needs a name first
     await user.type(input, 'AHU room — door side');

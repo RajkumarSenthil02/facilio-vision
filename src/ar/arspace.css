@@ -238,13 +238,15 @@ button.ar-pill { cursor: pointer; }
 /* ---------- Place-Assets full-screen overlay ---------- */
 
 .pa-stage {
-  /* A full-screen takeover: it owns the viewport, and the app dock is hidden
-     while it is open (see body.pa-open). Previously this box spanned the whole
-     viewport while the dock still painted over its footer — so the Save and
-     Place-marker buttons sat UNDER the dock and could not be tapped at all. */
+  /* Stops exactly where the app dock begins — the dock stays visible (design)
+     AND the footer actions are reachable. Spanning the whole viewport is what
+     put Save and Place-marker underneath the dock, untappable. */
   position: fixed;
-  inset: 0;
-  z-index: 200;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--nav-h) + var(--safe-b));
+  z-index: 40;
   display: flex;
   flex-direction: column;
   background: var(--hud-bg, #0b1220);
@@ -267,14 +269,72 @@ button.ar-pill { cursor: pointer; }
 
 .pa-body { position: relative; flex: 1; overflow: hidden; }
 
+/* Floating action area over the camera — no solid bar, per the design. */
 .pa-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 8;
   display: flex;
-  gap: 8px;
-  flex: none;
-  padding: 10px 12px calc(10px + var(--safe-b));
-  background: rgba(16, 24, 38, 0.9);
-  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: linear-gradient(180deg, rgba(11, 18, 32, 0) 0%, rgba(11, 18, 32, 0.55) 60%);
 }
+
+.pa-tip {
+  align-self: center;
+  margin: 0;
+  max-width: 100%;
+  padding: 9px 14px;
+  background: rgba(11, 18, 32, 0.82);
+  border-radius: var(--radius-pill);
+  color: #fff;
+  font: 500 13.5px/18px var(--font-sans);
+  text-align: center;
+}
+
+.pa-actions { display: flex; gap: 10px; }
+
+.pa-btn {
+  flex: 1;
+  min-height: 46px;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--radius-pill);
+  font: 600 14.5px/1 var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pa-btn.dark {
+  background: rgba(11, 18, 32, 0.86);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.pa-btn.light { background: rgba(255, 255, 255, 0.94); color: var(--ink-900); }
+.pa-btn.primary {
+  background: linear-gradient(90deg, var(--brand-indigo-600) 0%, var(--blue-500) 100%);
+  color: #fff;
+}
+.pa-btn:disabled { opacity: 0.55; }
+
+/* top pills */
+.pa-badge {
+  position: absolute;
+  top: calc(var(--safe-t) + 12px);
+  right: 12px;
+  z-index: 9;
+  padding: 10px 16px;
+  border-radius: var(--radius-pill);
+  background: rgba(11, 18, 32, 0.86);
+  color: #fff;
+  font: 600 14px/1 var(--font-sans);
+}
+
+.pa-badge.sweep { background: var(--brand-indigo-600); }
 
 /* centered light card used for setup / QR / marker forms */
 .pa-sheet {

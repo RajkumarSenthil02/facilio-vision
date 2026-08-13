@@ -35,26 +35,30 @@ export function setSweepFrameSource(fn: (() => CanvasImageSource | null) | null)
 }
 
 const MAX_FRAMES = 12;
-// There is no minimum frame gate any more: the sweep is a by-product of
-// placing markers, so a survey saves with whatever it captured. Fewer frames
-// only means visual relocalization is weaker — the standpoint QR still works.
+/** Enough frames to relocalize from: 8 live, 4 in mock (no sensors to sweep). */
+function minFrames(): number {
+  return isMockMode() ? 4 : 8;
+}
 /** Auto-capture cadence: one frame every ~30° of heading change. */
 const CAPTURE_STEP_DEG = 28;
 
 /**
- * Two steps, not four.
+ * Name it -> sweep -> place markers.
  *
- * It was Setup -> Sweep -> Standpoint QR -> Markers, each gating the next. But
- * you turn on the spot to place markers anyway, so the sweep now captures
- * itself while you do that; and QR enrolment already lives in the survey
- * detail sheet, which mints and prints codes. What is left is the actual job:
- * name it, then place markers.
+ * The camera is full-bleed on every step and NOTHING covers it: chrome is
+ * floating pills over the feed, and the app dock stays visible beneath (the
+ * stage stops exactly where the dock begins, which is also why the footer
+ * actions are reachable — they used to sit under it).
+ *
+ * Standpoint QR is optional and lives on the sweep step; it is not a gate.
  */
-type Step = 'setup' | 'markers';
+type Step = 'setup' | 'sweep' | 'markers';
 
 interface MarkerDraft {
   rel: number;
   pitch: number;
+  /** Chosen by the footer button, so the form opens on the right mode. */
+  kind: 'asset' | 'note';
 }
 
 let markerSeq = 0;
@@ -78,13 +82,15 @@ export default function PlaceAssetsScreen({
   const [frames, setFrames] = useState<SweepFrame[]>([]);
   const [markers, setMarkers] = useState<SurveyMarker[]>([]);
   // QR enrolment moved to the survey detail sheet; a new survey saves without one.
-  const qrCode: string | null = null;
   const qrHeading: number | undefined = undefined;
   const [hint, setHint] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // Mock stand-in for the device heading: rotated by explicit buttons.
   const [mockHeading, setMockHeading] = useState(0);
   const [markerForm, setMarkerForm] = useState<MarkerDraft | null>(null);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrDraft, setQrDraft] = useState('');
+  const qrCode: string | null = qrDraft.trim() || null;
   const busyRef = useRef(false);
 
   // Camera-first: the live feed runs from the moment the overlay opens — the
@@ -114,8 +120,9 @@ export default function PlaceAssetsScreen({
     return o.ok ? o.pitch : 0;
   };
 
-  // Own the whole viewport while authoring — the dock must not cover the
-  // action bar (it did, and Save was untappable).
+  // The stage stops where the dock begins, so the dock stays visible (design)
+  // and the footer is never covered. The marker keeps tests honest about which
+  // surface owns the screen.
   useEffect(() => {
     document.body.classList.add('pa-open');
     return () => document.body.classList.remove('pa-open');
@@ -137,7 +144,7 @@ export default function PlaceAssetsScreen({
 
   // Live guided sweep: auto-capture a frame every ~30° of heading change.
   useEffect(() => {
-    if (step !== 'markers' || mock) return;
+    if (step !== 'sweep' || mock) return;
     if (!pose.ok || frames.length >= MAX_FRAMES) return;
     const last = frames[frames.length - 1];
     if (!last || Math.abs(wrap(pose.heading - last.heading)) >= CAPTURE_STEP_DEG) {
@@ -147,12 +154,12 @@ export default function PlaceAssetsScreen({
   }, [step, mock, pose, frames]);
 
 
-  const placeMarkerHere = () => {
+  const placeMarkerHere = (kind: 'asset' | 'note') => {
     // Direction FROZEN AT THE MOMENT OF THE TAP so the phone can be lowered
     // to type. Stored relative to sweep frame 0.
     const base = frames[0]?.heading ?? 0;
     const rel = (currentHeading() - base + 360) % 360;
-    setMarkerForm({ rel, pitch: currentPitch() });
+    setMarkerForm({ rel, pitch: currentPitch(), kind });
   };
 
   const addMarker = (m: Omit<SurveyMarker, 'id'>) => {
@@ -206,20 +213,22 @@ export default function PlaceAssetsScreen({
   };
 
   const sweepBase = frames[0]?.heading ?? 0;
-  const stepLabel = step === 'setup' ? 'Name it' : `${markers.length} placed`;
 
   return (
     <div className="pa-stage" role="dialog" aria-label="Place assets — AR survey">
       {/* On setup the camera carries the screen and a floating pill is the only
           chrome over it; the step bar returns once the flow is underway. */}
       {step !== 'setup' && (
-        <div className="pa-topbar">
-          <h2>Place assets (AR survey)</h2>
-          <span className="pa-step">{stepLabel}</span>
-          <button className="ar-toggle" onClick={onClose}>
-            Close
+        <>
+          <button className="pa-exit" onClick={onClose}>
+            ← Exit survey
           </button>
-        </div>
+          <span className={step === 'sweep' ? 'pa-badge sweep' : 'pa-badge'}>
+            {step === 'sweep'
+              ? `Sweep ${Math.min(frames.length, MAX_FRAMES)}/${MAX_FRAMES}`
+              : `${markers.length} marker${markers.length === 1 ? '' : 's'}`}
+          </span>
+        </>
       )}
 
       <div className="pa-body">
@@ -253,10 +262,10 @@ export default function PlaceAssetsScreen({
                 disabled={!name.trim()}
                 onClick={() => {
                   void enableArOrientation(); // iOS gate — this click is the user gesture
-                  setStep('markers');
+                  setStep('sweep');
                 }}
               >
-                Start placing
+                Start sweep
               </button>
               <p className="sv-help">
                 {scopeLabel
@@ -331,14 +340,66 @@ export default function PlaceAssetsScreen({
         {hint && <div className="ar-hint" role="status">{hint}</div>}
       </div>
 
+      {step === 'sweep' && (
+        <div className="pa-foot sweep">
+          <p className="pa-tip">Rotate slowly in place — frames capture automatically</p>
+          <div className="pa-actions">
+            <button className="pa-btn dark" onClick={() => setQrOpen(true)}>
+              Scan standpoint QR (optional)
+            </button>
+            <button
+              className="pa-btn light"
+              disabled={frames.length < minFrames()}
+              onClick={() => setStep('markers')}
+            >
+              Place markers →
+            </button>
+          </div>
+        </div>
+      )}
+
+      <Sheet
+        open={qrOpen}
+        title="Standpoint QR (optional)"
+        onClose={() => setQrOpen(false)}
+        footer={
+          <button className="btn-quiet" style={{ flex: 1 }} onClick={() => setQrOpen(false)}>
+            Done
+          </button>
+        }
+      >
+        <p className="sv-help" style={{ marginTop: 0 }}>
+          Stick a code at this spot and technicians load these markers by scanning it — no
+          searching. You can also add one later from the survey's detail sheet.
+        </p>
+        <label className="sv-field">
+          <span className="sv-field-label">Code</span>
+          <input
+            className="sv-input"
+            value={qrDraft}
+            onChange={(e) => setQrDraft(e.target.value)}
+            placeholder="Scan or type the code"
+          />
+        </label>
+      </Sheet>
+
       {step === 'markers' && (
         <div className="pa-foot">
-          <button className="btn btn-secondary" onClick={placeMarkerHere}>
-            Place marker here
-          </button>
-          <button className="btn btn-primary" disabled={saving} onClick={() => void save()}>
-            {saving ? 'Saving…' : `Save survey (${markers.length})`}
-          </button>
+          <div className="pa-actions">
+            <button className="pa-btn primary" onClick={() => placeMarkerHere('asset')}>
+              + Asset marker
+            </button>
+            <button className="pa-btn light" onClick={() => placeMarkerHere('note')}>
+              Note
+            </button>
+            <button
+              className="pa-btn light"
+              disabled={saving}
+              onClick={() => void save()}
+            >
+              {saving ? 'Saving…' : `Save survey (${markers.length})`}
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -358,7 +419,7 @@ function MarkerForm({
   onCancel: () => void;
   onAdd: (m: Omit<SurveyMarker, 'id'>) => void;
 }) {
-  const [kind, setKind] = useState<'asset' | 'note' | 'label'>('asset');
+  const [kind, setKind] = useState<'asset' | 'note' | 'label'>(draft.kind);
   const [text, setText] = useState('');
   const [picked, setPicked] = useState<Asset | null>(null);
 

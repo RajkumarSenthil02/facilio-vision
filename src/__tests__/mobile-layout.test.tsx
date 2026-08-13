@@ -40,7 +40,7 @@ describe('mobile shell layout', () => {
 });
 
 describe('survey authoring — the footer must be reachable', () => {
-  it('takes over the viewport (dock hidden) and exposes BOTH footer actions', async () => {
+  it('keeps the dock visible, and every step\'s footer actions are reachable', async () => {
     const user = userEvent.setup();
     bootAt('?mock=1&tab=surveys');
 
@@ -53,19 +53,20 @@ describe('survey authoring — the footer must be reachable', () => {
     expect(screen.queryByRole('combobox', { name: 'Floor' })).toBeNull();
 
     await user.type(nameField, 'Plant room');
-    await user.click(screen.getByRole('button', { name: 'Start placing' }));
-
-    // placing step: the overlay owns the viewport, so the dock cannot cover it
+    await user.click(screen.getByRole('button', { name: 'Start sweep' }));
     await waitFor(() => expect(document.body).toHaveClass('pa-open'));
 
-    const foot = document.querySelector('.pa-foot') as HTMLElement;
-    expect(foot).not.toBeNull();
-    expect(within(foot).getByRole('button', { name: /Place marker here/ })).toBeInTheDocument();
-    expect(within(foot).getByRole('button', { name: /Save survey/ })).toBeInTheDocument();
+    // the dock is NOT hidden — the stage stops where the dock begins
+    expect(screen.getByRole('tab', { name: 'Surveys' })).toBeInTheDocument();
 
-    // the footer is the last child of the stage — nothing paints after it
-    const stage = document.querySelector('.pa-stage') as HTMLElement;
-    expect(stage.lastElementChild).toBe(foot);
+    // sweep step: progress pill + its two actions
+    const sweepFoot = document.querySelector('.pa-foot') as HTMLElement;
+    expect(document.querySelector('.pa-badge')).toHaveTextContent(/Sweep \d+\/12/);
+    expect(
+      within(sweepFoot).getByRole('button', { name: /Scan standpoint QR/ }),
+    ).toBeInTheDocument();
+    const toMarkers = within(sweepFoot).getByRole('button', { name: /Place markers/ });
+    expect(toMarkers).toBeInTheDocument();
   });
 
   it('releases the takeover when the flow closes', async () => {

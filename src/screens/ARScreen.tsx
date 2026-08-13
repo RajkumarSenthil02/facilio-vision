@@ -1,18 +1,23 @@
 // The AR stage (roadmap 5): a REAL camera surface with survey markers
 // anchored to compass directions.
 //
-// Zones (Dock HUD design direction 1b) are unchanged from the preview stage:
-//   A+B+C  one 38px top bar — context chip · ONE state chip · AR toggle
-//   —      standpoint banner (outranks floor/site once localized)
-//   D      marker space (now the gyro-driven ArSpace registry, not slots)
-//   E      candidates row (fed by the live scan loop)
-//   F      dock
+// Mobile-native HUD (matches the reference AR screen). The stage fills its
+// pane exactly (height:100%, no 100vh, no page scroll) and lays chrome out in
+// thumb-reachable bands:
+//   top-left     site chip (40px, 15px) → the site picker sheet
+//   top-right    vertical rail of 56px squares — Voice · AI fault · AR toggle
+//                (the AR button keeps the accessible name "AR on"/"AR off":
+//                the camera contract and the smoke tests read it)
+//   top-centre   exactly ONE state chip, below it the standpoint banner
+//   middle       dark translucent hint pills, tappable when they carry an action
+//   bottom       52px primary + secondary action row, above the app dock
+//   sheets       the shared Sheet primitive — they scroll internally, never the page
 //
 // What is real now: the camera feed (src/components/camera), the recognition
 // loop (src/vision/scanLoop), presence via standpoint QR + visual
 // relocalization, and marker bearings corrected by the relocalization Δ:
 //   abs = (sweep[0].heading + marker.heading + relocΔ + 360) % 360
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { provider } from '../api/provider';
 import { appStore } from '../api/appStore';
@@ -30,6 +35,9 @@ import { dequantize, l2Normalize } from '../vision/quantize';
 import { CameraView } from '../components/camera/CameraView';
 import { CodeSheet } from '../components/camera/CodeSheets';
 import { useCamera } from '../components/camera/useCamera';
+import Sheet from '../components/Sheet';
+import LocationPicker from '../components/LocationPicker';
+import VoiceSheet from './VoiceSheet';
 import { useScanLoop } from '../vision/scanLoop';
 import { describeEntry, resolveCode } from '../vision/codes';
 import { stampStopByCode } from '../rounds/roundsStore';
@@ -87,7 +95,58 @@ interface FaultDraft {
   fromPhoto: boolean;
 }
 
-type Sheet = 'markers' | 'note' | 'fault' | 'legs' | null;
+type SheetId = 'markers' | 'note' | 'fault' | 'legs' | 'site' | 'stand' | 'voice' | null;
+
+/**
+ * The shared Sheet primitive, named for assistive tech.
+ *
+ * Sheet owns the dialog root but takes no label prop (it is frozen for this
+ * workstream), and a `role="dialog"` gets no accessible name from its
+ * contents — so the name is stamped on the mounted root instead of nesting a
+ * second dialog inside it.
+ */
+function ArSheet(props: {
+  label: string;
+  open: boolean;
+  title?: ReactNode;
+  onClose(): void;
+  footer?: ReactNode;
+  size?: 'auto' | 'tall';
+  children: ReactNode;
+}) {
+  const { label, open, ...rest } = props;
+  const host = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    host.current?.querySelector('.sheet-root')?.setAttribute('aria-label', label);
+  });
+  if (!open) return null;
+  return (
+    <div ref={host} className="ar-sheet-host">
+      <Sheet open {...rest} />
+    </div>
+  );
+}
+
+const MicIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="9" y="3" width="6" height="11" rx="3" />
+    <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+  </svg>
+);
+
+const SparkleIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+    <path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" />
+  </svg>
+);
+
+const ArIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" />
+    <path d="M12 12l8-4.5M12 12v9M12 12L4 7.5" />
+  </svg>
+);
 
 export default function ARScreen() {
   const { scope, names } = useLocationScope();
@@ -101,7 +160,7 @@ export default function ARScreen() {
   const [presence, setPresence] = useState<Presence | null>(null);
   const [focusAssetId, setFocusAssetId] = useState<number | null>(null);
   const [guide, setGuide] = useState<{ heading: number; name: string } | null>(null);
-  const [sheet, setSheet] = useState<Sheet>(null);
+  const [sheet, setSheet] = useState<SheetId>(null);
   const [codeSheet, setCodeSheet] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [minimized, setMinimized] = useState(false);
@@ -347,6 +406,21 @@ export default function ARScreen() {
     }
   };
 
+  /**
+   * Compass-only fallback: no code to scan and no visual match, so the user
+   * names the standpoint. Same forced presence the "registered against a
+   * survey but no enrolled heading" QR branch already produces — Δ is 0, so
+   * bearings are raw compass bearings and presence never decays.
+   */
+  const standAt = (survey: Survey) => {
+    const reloc = relocRef.current;
+    reloc.current = { surveyId: survey.id, delta: 0, score: 1 };
+    reloc.lastMatchAt = Date.now();
+    setPresence({ surveyId: survey.id, delta: 0, via: 'qr', forced: true });
+    setSheet(null);
+    setHint(`Compass-only at ${survey.name} — bearings are uncorrected`);
+  };
+
   const startGuide = (heading: number, name: string) => {
     setGuide({ heading, name });
     setSheet(null);
@@ -478,10 +552,13 @@ export default function ARScreen() {
           ? { cls: 'ar-state verifying', text: HINT_COPY[scan.hint] ?? scan.hint }
           : { cls: 'ar-state verifying', text: 'Looking for a standpoint…' };
 
+
+  const markerCount = arOn && !minimized ? markers.length : 0;
+
   return (
     <div className="ar-stage">
-      {/* Zone D background: the real camera, full-bleed inside the stage. Its
-          unavailable/paused states render here, never as a whole-screen error. */}
+      {/* The real camera, full-bleed inside the stage. Its unavailable/paused
+          states render here as centred cards, never as a whole-screen error. */}
       <div className="ar-camera-slot">
         {arOn && (
           <CameraView
@@ -494,35 +571,56 @@ export default function ARScreen() {
       </div>
       <div className="ar-scrim" />
 
-      {/* Zones A+B+C: the single top bar */}
-      <div className="ar-topbar">
-        <button className="ar-context" title="Change site in Portfolio">
-          {names.site ?? 'All sites'}
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" style={{ opacity: 0.7 }} aria-hidden="true">
+      {/* top band: site chip left, action rail right, both clear of the notch */}
+      <div className="ar-top">
+        <button className="ar-chip-site" onClick={() => setSheet('site')}>
+          <span className="txt">{names.site ?? 'All sites'}</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" style={{ opacity: 0.75 }} aria-hidden="true">
             <path d="M6 9l6 6 6-6" />
           </svg>
         </button>
-        <span className="ar-topbar-divider" />
+
+        <div className="ar-rail">
+          <button
+            className={sheet === 'voice' ? 'ar-rail-btn mic live' : 'ar-rail-btn mic'}
+            aria-label="Voice"
+            onClick={() => setSheet(sheet === 'voice' ? null : 'voice')}
+          >
+            <MicIcon />
+          </button>
+          <button className="ar-rail-btn ai" aria-label="Raise fault with AI" onClick={openFault}>
+            <SparkleIcon />
+          </button>
+          <button
+            className={arOn ? 'ar-rail-btn on' : 'ar-rail-btn'}
+            aria-label={arOn ? 'AR on' : 'AR off'}
+            aria-pressed={arOn}
+            onClick={toggleAr}
+          >
+            <ArIcon />
+          </button>
+        </div>
+      </div>
+
+      {/* exactly ONE state chip, top-centre */}
+      <div className="ar-state-row">
         <span className={stateChip.cls}>
           <span className="ar-state-dot" />
           <span className="txt">{stateChip.text}</span>
         </span>
-        <button className={arOn ? 'ar-toggle on' : 'ar-toggle'} onClick={toggleAr}>
-          {arOn ? 'AR on' : 'AR off'}
-        </button>
       </div>
 
       {/* Standpoint banner — outranks floor/site once we know where we are */}
       {arOn && activeSurvey && (
         <div className="ar-standpoint">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z" />
           </svg>
           {activeSurvey.name} · {markers.length} marker{markers.length === 1 ? '' : 's'}
         </div>
       )}
 
-      {/* Zone D: markers, positioned by the ArSpace node registry */}
+      {/* markers, positioned by the ArSpace node registry */}
       {arOn && !minimized && (
         <ArSpace active={arOn}>
           {activeSurvey &&
@@ -559,17 +657,11 @@ export default function ARScreen() {
         </ArSpace>
       )}
 
-      {arOn && minimized && (
-        <button className="ar-board-restore" onClick={() => setBoardMinimized(false)}>
-          Restore markers ({markers.length})
-        </button>
-      )}
-
       {arOn && activeSurvey && !minimized && (
         <StandpointMarker
           label={activeSurvey.name}
           relocalizing={presence?.via !== 'qr'}
-          style={{ left: '50%', top: '78%', transform: 'translateX(-50%)' }}
+          style={{ left: '50%', top: '72%', transform: 'translateX(-50%)' }}
         />
       )}
 
@@ -594,183 +686,248 @@ export default function ARScreen() {
         <span className="e" />
       </div>
 
-      {/* Zone E: candidates from the scan loop */}
-      {arOn && scan.candidates.length > 0 && (
-        <div className="ar-candidates">
-          {scan.candidates.slice(0, 3).map((candidate, index) => {
-            const summary = summarize(byAsset.get(candidate.assetId) ?? []);
-            return (
-              <button
-                key={candidate.assetId}
-                className={index === 0 ? 'ar-candidate top' : 'ar-candidate'}
-                onClick={() => setFocusAssetId(candidate.assetId)}
-              >
-                <span className={`dot ${dotClass(summary.status)}`} />
-                {assetName(candidate.assetId)}
-                <span className="score">{Math.round(candidate.score * 100)}%</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Zone F: dock */}
-      <div className="ar-dock">
-        <button
-          className={sheet === 'markers' ? 'ar-dock-btn active' : 'ar-dock-btn'}
-          onClick={() => setSheet(sheet === 'markers' ? null : 'markers')}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
-            <path d="M4 7h16M4 12h16M4 17h10" />
-          </svg>
-          Markers
-          <span className="ar-dock-badge">{arOn && !minimized ? markers.length : 0}</span>
-        </button>
-        <button
-          className={sheet === 'note' ? 'ar-dock-btn active' : 'ar-dock-btn'}
-          disabled={!activeSurvey}
-          onClick={() => setSheet(sheet === 'note' ? null : 'note')}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M5 4h9l5 5v11H5z" />
-            <path d="M14 4v5h5" />
-          </svg>
-          Pin note
-        </button>
-        <button className={sheet === 'fault' ? 'ar-dock-btn active' : 'ar-dock-btn'} onClick={openFault}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M12 3l9 16H3z" />
-            <path d="M12 9v5M12 17h.01" />
-          </svg>
-          Raise fault
-        </button>
+      {/* mid-screen hint pills — the second one carries the action */}
+      <div className="ar-hints">
+        {arOn && minimized && (
+          <button className="ar-pill ar-pill-action ar-board-restore" onClick={() => setBoardMinimized(false)}>
+            Restore markers ({markers.length})
+          </button>
+        )}
+        {arOn && !presence && (
+          <>
+            <p className="ar-pill">
+              {camera.state === 'unavailable'
+                ? 'No camera here — name the standpoint to place its markers'
+                : 'Stand at a standpoint — pan slowly to locate'}
+            </p>
+            <button className="ar-pill ar-pill-action" onClick={() => setSheet('stand')}>
+              Show markers anyway (compass-only)
+            </button>
+          </>
+        )}
       </div>
 
-      {/* marker index — one row per marker, each with a GUIDE action */}
-      {sheet === 'markers' && (
-        <div className="ar-sheet" role="dialog" aria-label="Marker index">
-          <div className="ar-sheet-hd">
-            <h3>Markers</h3>
-            <button className="ar-sheet-x" aria-label="Close marker index" onClick={() => setSheet(null)}>
-              ✕
-            </button>
+      {/* bottom band: candidates, the toast, then the 52px action row */}
+      <div className="ar-bottom">
+        {arOn && scan.candidates.length > 0 && (
+          <div className="ar-candidates">
+            {scan.candidates.slice(0, 3).map((candidate, index) => {
+              const summary = summarize(byAsset.get(candidate.assetId) ?? []);
+              return (
+                <button
+                  key={candidate.assetId}
+                  className={index === 0 ? 'ar-candidate top' : 'ar-candidate'}
+                  onClick={() => setFocusAssetId(candidate.assetId)}
+                >
+                  <span className={`dot ${dotClass(summary.status)}`} />
+                  {assetName(candidate.assetId)}
+                  <span className="score">{Math.round(candidate.score * 100)}%</span>
+                </button>
+              );
+            })}
           </div>
-          <div className="ar-sheet-bd">
-            {!activeSurvey && (
-              <p className="muted small">
-                Scan a standpoint code (or let the camera recognize the spot) to load its markers.
-              </p>
-            )}
-            {activeSurvey && (
-              <>
-                <p className="mi-group">{activeSurvey.name}</p>
-                {markers.map((marker) => (
-                  <div key={marker.id} className="mi-row">
-                    <span className="lbl">{marker.label}</span>
-                    <span className="kind">{marker.assetId ? 'asset' : marker.note ? 'note' : 'label'}</span>
-                    <span className="meta">
+        )}
+
+        {hint && (
+          <div className="ar-toast" role="status">
+            {hint}
+          </div>
+        )}
+
+        <div className="ar-actions">
+          <button
+            className="ar-action ar-action-primary"
+            onClick={() => setSheet(activeSurvey ? 'note' : 'stand')}
+          >
+            <span aria-hidden="true">📌</span> Pin note here
+          </button>
+          <button
+            className={sheet === 'markers' ? 'ar-action ar-action-secondary active' : 'ar-action ar-action-secondary'}
+            onClick={() => setSheet(sheet === 'markers' ? null : 'markers')}
+          >
+            Markers
+            <span className="ar-dock-badge">{markerCount}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ---- sheets: they scroll internally, the stage never does ---- */}
+
+      <ArSheet
+        label="Site"
+        open={sheet === 'site'}
+        title="Where are you working?"
+        onClose={() => setSheet(null)}
+      >
+        <LocationPicker />
+      </ArSheet>
+
+      <ArSheet
+        label="Pick a standpoint"
+        open={sheet === 'stand'}
+        title="Pick a standpoint"
+        onClose={() => setSheet(null)}
+      >
+        <p className="ar-sheet-note">
+          Compass-only: markers are placed on raw compass bearings, so they drift until you
+          scan the standpoint code.
+        </p>
+        {surveys.length === 0 && (
+          <p className="empty-card">No surveys yet — capture one from the Surveys tab.</p>
+        )}
+        {surveys.map((survey) => (
+          <button key={survey.id} className="row-card" onClick={() => standAt(survey)}>
+            <span>
+              <span className="row-card-title">{survey.name}</span>
+              <span className="row-card-meta">
+                {survey.spaceName ?? 'No space'} · {survey.markers.length} marker
+                {survey.markers.length === 1 ? '' : 's'}
+              </span>
+            </span>
+            <span className="row-badge">Stand here</span>
+          </button>
+        ))}
+      </ArSheet>
+
+      {/* marker index — one row per marker, each with a GUIDE action */}
+      <ArSheet
+        label="Marker index"
+        open={sheet === 'markers'}
+        title="Markers"
+        onClose={() => setSheet(null)}
+        size="tall"
+        footer={
+          activeSurvey ? (
+            <button className="btn-quiet grow" onClick={() => setBoardMinimized(!minimized)}>
+              {minimized ? 'Restore marker board' : 'Minimize marker board'}
+            </button>
+          ) : (
+            <button className="btn-cta" onClick={() => setSheet('stand')}>
+              Pick a standpoint
+            </button>
+          )
+        }
+      >
+        {!activeSurvey && (
+          <p className="ar-sheet-note">
+            Scan a standpoint code (or let the camera recognize the spot) to load its markers.
+          </p>
+        )}
+        {activeSurvey && (
+          <>
+            <p className="mi-group">{activeSurvey.name}</p>
+            {markers.map((marker) => (
+              <div key={marker.id} className="mi-row">
+                <span className="lbl">
+                  <span className="txt">{marker.label}</span>
+                  <span className="meta">
+                    <span className="kind">
+                      {marker.assetId ? 'asset' : marker.note ? 'note' : 'label'}
+                    </span>
+                    <span className="deg">
                       {Math.round(markerAbsBearing(activeSurvey, marker, presence?.delta ?? 0))}°
                     </span>
-                    <button className="btn btn-secondary" onClick={() => guideToMarker(marker)}>
-                      Guide
-                    </button>
-                  </div>
-                ))}
-                <button className="btn btn-secondary" onClick={() => setBoardMinimized(!minimized)}>
-                  {minimized ? 'Restore marker board' : 'Minimize marker board'}
+                  </span>
+                </span>
+                <button className="btn-quiet" onClick={() => guideToMarker(marker)}>
+                  Guide
                 </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+              </div>
+            ))}
+          </>
+        )}
+      </ArSheet>
 
-      {sheet === 'note' && (
-        <div className="ar-sheet" role="dialog" aria-label="Pin a note">
-          <div className="ar-sheet-hd">
-            <h3>Pin a note here</h3>
-            <button className="ar-sheet-x" aria-label="Close note" onClick={() => setSheet(null)}>
-              ✕
-            </button>
-          </div>
-          <div className="ar-sheet-bd">
-            <label className="field">
-              <span>Note</span>
-              <textarea
-                rows={3}
-                value={noteText}
-                onChange={(e) => setNoteText(e.target.value)}
-                placeholder="What should the next technician know?"
-              />
-            </label>
-            <button className="btn btn-primary" disabled={!noteText.trim()} onClick={() => void pinNote()}>
-              Save note
-            </button>
-          </div>
-        </div>
-      )}
+      <ArSheet
+        label="Pin a note"
+        open={sheet === 'note'}
+        title="Pin a note here"
+        onClose={() => setSheet(null)}
+        footer={
+          <button className="btn-cta" disabled={!noteText.trim()} onClick={() => void pinNote()}>
+            Save note
+          </button>
+        }
+      >
+        <label className="field">
+          <span>Note</span>
+          <textarea
+            rows={4}
+            value={noteText}
+            onChange={(e) => setNoteText(e.target.value)}
+            placeholder="What should the next technician know?"
+          />
+        </label>
+      </ArSheet>
 
-      {sheet === 'fault' && (
-        <div className="ar-sheet" role="dialog" aria-label="Raise a fault">
-          <div className="ar-sheet-hd">
-            <h3>Raise a fault</h3>
-            <button className="ar-sheet-x" aria-label="Close fault" onClick={() => setSheet(null)}>
-              ✕
-            </button>
-          </div>
-          <div className="ar-sheet-bd">
-            {fault.busy && <p className="muted small">Reading the frame…</p>}
-            {!fault.busy && !fault.fromPhoto && (
-              <p className="muted small">No camera frame available — describe the fault yourself.</p>
-            )}
-            {fault.fromPhoto && <p className="muted small">Drafted from the current camera frame.</p>}
-            <label className="field">
-              <span>Subject</span>
-              <input
-                value={fault.subject}
-                onChange={(e) => setFault((f) => ({ ...f, subject: e.target.value }))}
-                placeholder="What is wrong?"
-              />
-            </label>
-            <label className="field">
-              <span>Description</span>
-              <textarea
-                rows={3}
-                value={fault.description}
-                onChange={(e) => setFault((f) => ({ ...f, description: e.target.value }))}
-              />
-            </label>
-            <button
-              className="btn btn-primary"
-              disabled={fault.busy || !fault.subject.trim()}
-              onClick={() => void submitFault()}
-            >
-              Create work order
-            </button>
-          </div>
-        </div>
-      )}
+      <ArSheet
+        label="Raise a fault"
+        open={sheet === 'fault'}
+        title="Raise a fault"
+        onClose={() => setSheet(null)}
+        footer={
+          <button
+            className="btn-cta"
+            disabled={fault.busy || !fault.subject.trim()}
+            onClick={() => void submitFault()}
+          >
+            Create work order
+          </button>
+        }
+      >
+        {fault.busy && <p className="ar-sheet-note">Reading the frame…</p>}
+        {!fault.busy && !fault.fromPhoto && (
+          <p className="ar-sheet-note">No camera frame available — describe the fault yourself.</p>
+        )}
+        {fault.fromPhoto && <p className="ar-sheet-note">Drafted from the current camera frame.</p>}
+        <label className="field">
+          <span>Subject</span>
+          <input
+            value={fault.subject}
+            onChange={(e) => setFault((f) => ({ ...f, subject: e.target.value }))}
+            placeholder="What is wrong?"
+          />
+        </label>
+        <label className="field">
+          <span>Description</span>
+          <textarea
+            rows={4}
+            value={fault.description}
+            onChange={(e) => setFault((f) => ({ ...f, description: e.target.value }))}
+          />
+        </label>
+      </ArSheet>
 
-      {sheet === 'legs' && (
-        <div className="ar-sheet" role="dialog" aria-label="Route">
-          <div className="ar-sheet-hd">
-            <h3>Route</h3>
-            <button className="ar-sheet-x" aria-label="Close route" onClick={() => setSheet(null)}>
-              ✕
-            </button>
-          </div>
-          <div className="ar-sheet-bd">
-            <ol className="leg-list">
-              {legs.map((leg) => (
-                <li key={leg.toSurveyId}>{leg.text}</li>
-              ))}
-            </ol>
-            <p className="leg-note">
-              The last metres are not a leg — scan the standpoint code there and the arrow takes over.
-            </p>
-          </div>
-        </div>
-      )}
+      <ArSheet label="Route" open={sheet === 'legs'} title="Route" onClose={() => setSheet(null)}>
+        <ol className="leg-list">
+          {legs.map((leg) => (
+            <li key={leg.toSurveyId}>{leg.text}</li>
+          ))}
+        </ol>
+        <p className="leg-note">
+          The last metres are not a leg — scan the standpoint code there and the arrow takes over.
+        </p>
+      </ArSheet>
+
+      <ArSheet
+        label="Voice"
+        open={sheet === 'voice'}
+        title="Voice"
+        onClose={() => setSheet(null)}
+        size="tall"
+      >
+        <VoiceSheet
+          assetInView={
+            focusAsset.data ? { id: focusAsset.data.id, name: focusAsset.data.name } : undefined
+          }
+          captureFrame={() => camera.snap()}
+          onUiAction={(verb) => {
+            if (verb === 'minimize') setBoardMinimized(true);
+            if (verb === 'expand') setBoardMinimized(false);
+            if (verb === 'clear') setGuide(null);
+          }}
+        />
+      </ArSheet>
 
       {/* in-view work orders for the focused asset */}
       {focusAsset.data && (
@@ -781,15 +938,17 @@ export default function ARScreen() {
               ✕
             </button>
           </div>
-          <div className="row-actions">
-            <button className="btn btn-secondary" onClick={() => directionTo(focusAsset.data as Asset)}>
-              Direction
-            </button>
-            <button className="btn btn-secondary" onClick={openFault}>
-              Raise a fault
-            </button>
+          <div className="ar-side-panel-bd scroll-y">
+            <div className="row-actions">
+              <button className="btn-quiet grow" onClick={() => directionTo(focusAsset.data as Asset)}>
+                Direction
+              </button>
+              <button className="btn-quiet grow" onClick={openFault}>
+                Raise a fault
+              </button>
+            </div>
+            <WorkOrderPanel asset={focusAsset.data} />
           </div>
-          <WorkOrderPanel asset={focusAsset.data} />
         </aside>
       )}
 
@@ -800,12 +959,6 @@ export default function ARScreen() {
           onClose={() => setCodeSheet(null)}
           onLinked={(entry) => setHint(`QR linked: ${describeEntry(entry)}`)}
         />
-      )}
-
-      {hint && (
-        <div className="ar-hint" role="status">
-          {hint}
-        </div>
       )}
     </div>
   );

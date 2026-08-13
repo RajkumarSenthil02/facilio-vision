@@ -1,6 +1,9 @@
-// Design-system smoke for the Dock HUD stage, now over the REAL camera:
-// the zones render, the camera is live on open (camera-first), and
-// the motion sensors, and the marker board minimizes/restores (persisted).
+// Design-system smoke for the mobile-native AR stage over the REAL camera.
+//
+// jsdom has no layout, so "fits the screen" is asserted STRUCTURALLY: the
+// stage is class-driven (no inline/vh sizing), it is the only element between
+// the shell pane and the camera, and nothing inside it is a page-level
+// scroller — sheets and panels carry their own scrollers instead.
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -58,26 +61,68 @@ function bootAt(query: string) {
   return render(<App />);
 }
 
+function stageOf(container: HTMLElement): HTMLElement {
+  const stage = container.querySelector('.ar-stage');
+  expect(stage).not.toBeNull();
+  return stage as HTMLElement;
+}
+
 afterEach(() => {
   delete (globalThis as { DeviceOrientationEvent?: unknown }).DeviceOrientationEvent;
 });
 
-describe('AR HUD (mock mode)', () => {
-  it('renders the topbar zones, the crosshair and the dock', async () => {
+describe('AR HUD — mobile-native stage (mock mode)', () => {
+  it('renders the site chip, the rail, ONE state chip and the bottom action row', async () => {
     const { container } = bootAt('?mock=1&tab=ar');
 
-    // Zone A: site context chip
-    expect(await screen.findByText('All sites')).toBeInTheDocument();
-    // Zone B: exactly ONE state chip
-    expect(container.querySelectorAll('.ar-state')).toHaveLength(1);
-    // Zone C: the AR toggle, ON by default
+    // top-left: the site chip, tappable
+    expect(await screen.findByRole('button', { name: /All sites/ })).toBeInTheDocument();
+    // top-right rail: three 56px buttons, each with a real accessible name
+    expect(screen.getByRole('button', { name: 'Voice' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Raise fault with AI' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'AR on' })).toBeInTheDocument();
-    // Zone D + F
-    expect(container.querySelector('.ar-crosshair')).not.toBeNull();
-    expect(screen.getByRole('button', { name: /Markers/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Raise fault/ })).toBeInTheDocument();
+    const rail = container.querySelector('.ar-rail') as HTMLElement;
+    expect(within(rail).getAllByRole('button')).toHaveLength(3);
+    // the AR toggle is an icon button in the rail, not a text pill
+    expect(screen.getByRole('button', { name: 'AR on' })).toHaveClass('ar-rail-btn');
+    expect(screen.queryByText('AR on')).toBeNull();
+
+    // top-centre: exactly ONE state chip
+    expect(container.querySelectorAll('.ar-state')).toHaveLength(1);
+
+    // bottom action row: primary + secondary, sized by class contract
+    const primary = screen.getByRole('button', { name: /Pin note here/ });
+    const secondary = screen.getByRole('button', { name: /Markers/ });
+    expect(primary).toHaveClass('ar-action', 'ar-action-primary');
+    expect(secondary).toHaveClass('ar-action', 'ar-action-secondary');
+    // .ar-action is the 52px / ≥44px contract in src/styles/ar.css
+    expect(container.querySelector('.ar-actions')?.children).toHaveLength(2);
+
     // camera-first: the feed surface is mounted without any tap
     await waitFor(() => expect(container.querySelector('.fv-cam')).not.toBeNull());
+    expect(container.querySelector('.ar-crosshair')).not.toBeNull();
+  });
+
+  it('the stage fills its pane: class-driven height, no page-level scroller inside it', async () => {
+    const { container } = bootAt('?mock=1&tab=ar');
+    await screen.findByRole('button', { name: 'AR on' });
+    const stage = stageOf(container);
+
+    // no inline sizing at all — height comes from .ar-stage { height: 100% }
+    expect(stage.getAttribute('style')).toBeNull();
+    // the shell pane hosts it directly and opts out of scrolling (bleed)
+    const pane = stage.parentElement as HTMLElement;
+    expect(pane).toHaveClass('as-mobile-main', 'bleed');
+
+    // nothing inside the stage declares itself a scrolling page: the only
+    // scrollers are the opt-in .scroll-y / .scroll-x panes
+    for (const el of stage.querySelectorAll<HTMLElement>('*')) {
+      const style = el.getAttribute('style') ?? '';
+      expect(style).not.toMatch(/100vh|overflow-y:\s*scroll/);
+    }
+    // and the app chrome is never owned by the stage
+    expect(screen.getByRole('tab', { name: 'Surveys' })).toBeInTheDocument();
+    expect(stage.querySelector('.as-dock')).toBeNull();
   });
 
   it('camera is live on open; the first touch arms the iOS motion sensors', async () => {
@@ -88,23 +133,57 @@ describe('AR HUD (mock mode)', () => {
     const user = userEvent.setup();
     const { container } = bootAt('?mock=1&tab=ar');
 
-    // No tap needed: the feed surface mounts inside the stage on open.
-    const stage = (await screen.findByRole('button', { name: 'AR on' })).closest(
-      '.ar-stage',
-    ) as HTMLElement;
+    // No tap needed: the feed surface mounts inside the stage on open, and its
+    // unavailable state is a card INSIDE the stage, not a whole-screen error.
+    await screen.findByRole('button', { name: 'AR on' });
+    const stage = stageOf(container);
     await waitFor(() => expect(stage.querySelector('.fv-cam')).not.toBeNull());
     expect(within(stage).getByText(/Camera unavailable here/)).toBeInTheDocument();
-    // the app chrome is never owned by the stage
-    expect(screen.getByRole('tab', { name: 'Surveys' })).toBeInTheDocument();
+    expect(stage.querySelector('.fv-cam-unavailable')).not.toBeNull();
+    expect(
+      within(stage).getByRole('button', { name: /Open full app in browser/ }),
+    ).toHaveClass('fv-cam-open-browser');
 
     // iOS gates MOTION (not camera) behind a gesture — the first touch arms it
     await user.click(stage);
     await waitFor(() => expect(requestPermission).toHaveBeenCalled());
 
-    // toggling off still tears the feed down
+    // toggling off still tears the feed down, and the rail button renames
     await user.click(screen.getByRole('button', { name: 'AR on' }));
     expect(container.querySelector('.fv-cam')).toBeNull();
+    expect(screen.getByRole('button', { name: 'AR off' })).toBeInTheDocument();
     expect(screen.getByText('AR paused')).toBeInTheDocument();
+  });
+
+  it('the mid-screen hint pill carries an action: compass-only standpoint picking', async () => {
+    seed();
+    const user = userEvent.setup();
+    const { container } = bootAt('?mock=1&tab=ar');
+    await screen.findByRole('button', { name: 'AR on' });
+
+    // un-localized: a static hint pill plus a tappable one
+    const hints = container.querySelector('.ar-hints') as HTMLElement;
+    expect(within(hints).getByText(/pan slowly to locate|name the standpoint/)).toHaveClass('ar-pill');
+    const action = within(hints).getByRole('button', { name: /Show markers anyway/ });
+    expect(action).toHaveClass('ar-pill', 'ar-pill-action');
+
+    // its action opens the standpoint sheet — which scrolls internally
+    await user.click(action);
+    const sheet = await screen.findByRole('dialog', { name: 'Pick a standpoint' });
+    expect(sheet.querySelector('.sheet-body')).toHaveClass('scroll-y');
+
+    // picking one places the markers on raw compass bearings
+    await user.click(await within(sheet).findByRole('button', { name: /WS-01/ }));
+    expect(await screen.findByRole('button', { name: /AHU-03/ })).toHaveClass('ar-asset-tag');
+    expect(screen.getByText(/Compass-only at WS-01/)).toHaveClass('ar-toast');
+  });
+
+  it('the site chip opens the site picker sheet', async () => {
+    const user = userEvent.setup();
+    bootAt('?mock=1&tab=ar');
+    await user.click(await screen.findByRole('button', { name: /All sites/ }));
+    const sheet = await screen.findByRole('dialog', { name: 'Site' });
+    expect(within(sheet).getByText('Site')).toBeInTheDocument();
   });
 
   it('markers appear once localized, and the board minimizes ⇄ restores (persisted)', async () => {
@@ -117,23 +196,22 @@ describe('AR HUD (mock mode)', () => {
       scanBus.emit?.('ws-01-code');
     });
 
-    // Zone D: the survey's markers, asset tag + note tag
+    // the survey's markers: asset tag + note tag
     const tag = await screen.findByRole('button', { name: /AHU-03/ });
     expect(tag).toHaveClass('ar-asset-tag');
-    // the note marker renders as a note tag (and, off-view, as an edge chevron)
     expect(
       screen.getByText('Belt slipping — check on next PM', { selector: '.txt' }),
     ).toBeInTheDocument();
-    // dock badge counts them
+    // the action row's secondary counts them
     expect(screen.getByRole('button', { name: /Markers/ })).toHaveTextContent('2');
 
-    // minimize from the marker index
+    // minimize from the marker index (its footer action)
     await user.click(screen.getByRole('button', { name: /Markers/ }));
     await user.click(await screen.findByRole('button', { name: 'Minimize marker board' }));
     expect(screen.queryByRole('button', { name: /AHU-03/ })).not.toBeInTheDocument();
 
     const restore = await screen.findByRole('button', { name: /Restore markers \(2\)/ });
-    expect(restore).toHaveClass('ar-board-restore');
+    expect(restore).toHaveClass('ar-board-restore', 'ar-pill');
     await waitFor(() =>
       expect(localStorage.getItem('fv.mockKv.settings.board.none')).toBe('{"minimized":true}'),
     );

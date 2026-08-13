@@ -20,11 +20,14 @@
 
 .ar-stage {
   position: relative;
-  /* the shell owns the dock; the stage fills what is left */
+  /* The shell owns the dock; the stage fills EXACTLY what is left. No 100vh,
+     no min-height floor (a floor is what pushed the dock under the fold), and
+     no internal page scroll — sheets and panels scroll themselves. */
   height: 100%;
+  width: 100%;
   min-height: 0;
-  min-height: 480px;
   overflow: hidden;
+  overscroll-behavior: contain;
   background: var(--hud-bg);
   color: #fff;
   font-family: var(--font-sans);
@@ -64,64 +67,116 @@
 
 /* ---------- chip taxonomy (foundation 01) ---------- */
 
-/* Zone A+B: one 38px bar — site context, state, AR toggle (dock direction) */
-.ar-topbar {
+/* Top band: site chip left, 56px action rail right. Everything clears the
+   notch / Dynamic Island via --safe-t; the band itself is click-through so
+   the camera below stays tappable. */
+.ar-top {
   position: absolute;
-  top: 8px;
-  left: 16px;
-  right: 16px;
-  z-index: 5;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 6;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 10px;
-  height: 38px;
-  padding: 0 12px;
-  background: rgba(16, 24, 38, 0.74);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: var(--radius-lg);
+  padding: calc(var(--safe-t) + 10px) 12px 0;
+  pointer-events: none;
 }
 
-.ar-context {
+.ar-top > * { pointer-events: auto; }
+
+/* the site chip: 40px tall, 15px label, chevron — reference anatomy */
+.ar-chip-site {
   display: flex;
   align-items: center;
   gap: 6px;
+  max-width: 58%;
+  height: 40px;
+  padding: 0 14px;
+  background: rgba(16, 24, 38, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
   color: #fff;
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  background: none;
-  border: none;
-  padding: 0;
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
 }
 
-.ar-topbar-divider { width: 1px; height: 18px; background: rgba(255, 255, 255, 0.18); }
+.ar-chip-site .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* vertical rail — 56px squares, 10px apart, 12px radius */
+.ar-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: none;
+}
+
+.ar-rail-btn {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(16, 24, 38, 0.8);
+  color: #fff;
+  cursor: pointer;
+}
+
+.ar-rail-btn:hover { border-color: rgba(255, 255, 255, 0.3); }
+.ar-rail-btn.mic.live { background: var(--danger-500); border-color: transparent; }
+.ar-rail-btn.ai { background: var(--blue-500); border-color: transparent; }
+.ar-rail-btn.on { background: rgba(0, 89, 214, 0.32); border-color: rgba(120, 170, 255, 0.6); }
+
+/* ONE state chip, top centre, clear of both the chip and the rail */
+.ar-state-row {
+  position: absolute;
+  top: calc(var(--safe-t) + 58px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: center;
+  padding: 0 78px;
+  pointer-events: none;
+}
 
 .ar-state {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  background: rgba(16, 24, 38, 0.85);
   color: #fff;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
-  flex: 1;
-  min-width: 0;
 }
+
+.ar-state.verifying { background: rgba(84, 66, 201, 0.92); }
+.ar-state.locked { background: rgba(41, 160, 30, 0.92); }
+.ar-state.failed { background: rgba(182, 25, 25, 0.92); }
 
 .ar-state .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .ar-state-dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: var(--radius-pill);
-  flex: 0 0 6px;
+  flex: 0 0 7px;
 }
 
-.ar-state.verifying .ar-state-dot { background: var(--brand-indigo-400); animation: vsPulse 1.4s var(--ease-standard) infinite; }
-.ar-state.locked .ar-state-dot { background: var(--success-500); }
+.ar-state.verifying .ar-state-dot { background: #fff; animation: vsPulse 1.4s var(--ease-standard) infinite; }
+.ar-state.locked .ar-state-dot { background: #fff; }
 .ar-state.idle .ar-state-dot { background: rgba(255, 255, 255, 0.5); }
-.ar-state.failed .ar-state-dot { background: var(--danger-500); }
+.ar-state.failed .ar-state-dot { background: #fff; }
 
+/* kept for PlaceAssetsScreen's toolbar buttons (the AR stage now uses the rail) */
 .ar-toggle {
   display: flex;
   align-items: center;
@@ -143,21 +198,25 @@
 /* Standpoint banner — context class, outranks floor and site */
 .ar-standpoint {
   position: absolute;
-  top: 58px;
+  top: calc(var(--safe-t) + 100px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 4;
+  max-width: calc(100% - 156px);
   display: flex;
   align-items: center;
   gap: 7px;
-  height: 28px;
-  padding: 0 12px;
+  min-height: 32px;
+  padding: 0 14px;
   background: rgba(41, 160, 30, 0.94);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   color: #fff;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ---------- marker family (foundation 03) ---------- */
@@ -178,10 +237,10 @@
   transition: transform var(--dur-base) var(--ease-standard), opacity var(--dur-base) var(--ease-standard);
 }
 
-.ar-asset-tag .edge { width: 4px; flex: 0 0 4px; }
-.ar-asset-tag .body { flex: 1; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
-.ar-asset-tag .name { color: #fff; font-size: 14px; font-weight: 500; line-height: 18px; }
-.ar-asset-tag .sub { color: var(--hud-text-dim); font-size: 11px; line-height: 14px; }
+.ar-asset-tag .edge { width: 5px; flex: 0 0 5px; }
+.ar-asset-tag .body { flex: 1; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-height: 56px; }
+.ar-asset-tag .name { color: #fff; font-size: 15px; font-weight: 600; line-height: 20px; }
+.ar-asset-tag .sub { color: var(--hud-text-dim); font-size: 13px; line-height: 17px; }
 .ar-asset-tag .counts { display: flex; gap: 6px; padding-top: 2px; }
 
 .ar-asset-tag.selected {
@@ -206,10 +265,10 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  height: 22px;
-  padding: 0 8px;
+  height: 24px;
+  padding: 0 9px;
   border-radius: var(--radius-sm);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -222,15 +281,16 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: 190px;
-  padding: 8px 10px;
+  max-width: 210px;
+  min-height: 48px;
+  padding: 11px 13px;
   background: rgba(16, 24, 38, 0.86);
   border: 1px solid rgba(255, 212, 5, 0.6);
-  border-left: 4px solid var(--warning-500);
+  border-left: 5px solid var(--warning-500);
   border-radius: var(--radius-lg);
   color: #fff;
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 14px;
+  line-height: 19px;
   text-align: left;
   cursor: pointer;
 }
@@ -306,7 +366,7 @@
   animation: vsRing 2s var(--ease-standard) infinite;
 }
 
-.ar-standpoint-marker .lbl { font-size: 11px; font-weight: 500; }
+.ar-standpoint-marker .lbl { font-size: 13px; font-weight: 500; }
 
 /* Minimized dot: 14px, status colour, slow pulse ring */
 .ar-min-dot {
@@ -345,26 +405,77 @@
 .ar-min-dot .dot.st-red::after { color: var(--danger-500); }
 .ar-min-dot .dot.st-amber::after { color: var(--warning-500); }
 
-.ar-min-dot .lbl { color: rgba(255, 255, 255, 0.75); font-size: 10px; letter-spacing: 0.02em; }
+.ar-min-dot .lbl { color: rgba(255, 255, 255, 0.75); font-size: 13px; letter-spacing: 0.02em; }
 
-/* ---------- zone E: candidate chips ---------- */
+/* ---------- bottom band: candidates · toast · action row ----------
+   One flex column pinned to the bottom of the stage, immediately above the
+   app dock. Nothing here is position:fixed and nothing needs a magic offset:
+   the band grows upward as content appears. */
+
+.ar-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+/* embedded mode has no app dock below the stage — own the safe area here */
+.embedded .ar-bottom { padding-bottom: calc(12px + var(--safe-b)); }
+
+.ar-actions { display: flex; gap: 10px; }
+
+.ar-action {
+  flex: 1;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  color: #fff;
+  font: 600 15px/1.2 var(--font-sans);
+  cursor: pointer;
+}
+
+.ar-action-primary {
+  background: var(--blue-500);
+  box-shadow: 0 8px 22px rgba(0, 89, 214, 0.32);
+}
+
+.ar-action-primary:hover { background: var(--blue-600); border-color: transparent; }
+
+.ar-action-secondary {
+  background: rgba(16, 24, 38, 0.86);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.ar-action-secondary.active { background: rgba(255, 255, 255, 0.18); }
 
 .ar-candidates {
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: 96px;
   display: flex;
   gap: 8px;
-  overflow: hidden;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+
+.ar-candidates::-webkit-scrollbar { display: none; }
 
 .ar-candidate {
   display: flex;
   align-items: center;
   gap: 7px;
-  height: 34px;
-  padding: 0 12px;
+  flex: none;
+  min-height: 44px;
+  padding: 0 14px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: var(--radius-md);
   background: rgba(16, 24, 38, 0.72);
@@ -381,55 +492,21 @@
   font-weight: 500;
 }
 
-.ar-candidate .dot { width: 7px; height: 7px; border-radius: var(--radius-pill); }
-.ar-candidate .score { font-family: var(--font-mono); font-size: 11px; color: var(--ink-600); }
+.ar-candidate .dot { width: 8px; height: 8px; border-radius: var(--radius-pill); }
+.ar-candidate .score { font-family: var(--font-mono); font-size: 13px; color: var(--ink-600); }
 .ar-candidate:not(.top) .score { color: rgba(255, 255, 255, 0.6); }
 
-/* ---------- zone F: dock (hidden in embedded mode) ---------- */
-
-.ar-dock {
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: 28px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 52px;
-  padding: 0 8px;
-  background: rgba(16, 24, 38, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: var(--radius-xl);
-}
-
-.embedded .ar-dock { display: none; }
-
-.ar-dock-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 38px;
-  border: none;
-  border-radius: var(--radius-lg);
-  background: transparent;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.ar-dock-btn.active { background: rgba(255, 255, 255, 0.1); }
-
 .ar-dock-badge {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--blue-500);
   border-radius: var(--radius-pill);
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 600;
 }
+
+.ar-action-primary .ar-dock-badge { background: rgba(255, 255, 255, 0.24); }

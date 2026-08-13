@@ -238,7 +238,9 @@
   align-items: flex-start;
 }
 
-.sv-selects .ds-select { min-width: 0; flex: 0 0 auto; gap: 6px; }
+.sv-selects .ds-select { min-width: 0; flex: 1 1 46%; gap: 6px; }
+/* an expanded select takes the full row so its list is readable */
+.sv-selects .ds-select:has(.ds-select-inline) { flex: 1 1 100%; }
 
 .sv-selects .ds-select-label {
   font-size: var(--fs-tiny);
@@ -253,7 +255,7 @@
   padding: 0 12px;
   border-radius: var(--radius-sm);
   font-size: 14px;
-  max-width: 46vw;
+  max-width: 100%;
 }
 
 .sv-selects .ds-select-value {

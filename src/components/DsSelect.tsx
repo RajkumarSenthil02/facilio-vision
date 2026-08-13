@@ -19,11 +19,13 @@ interface Props {
  * Facilio DSM select — never a native <select> (standing rule).
  *
  * Two presentations, because one does not fit both:
- *  - TOUCH / narrow: a bottom action sheet. A floating popover attached to a
- *    control that already sits inside a sheet has nowhere to go — it flips up,
- *    covers the very context you are choosing for, and reads as a detached
- *    slab. An action sheet is what a native app does, and it cannot be clipped
- *    by any ancestor.
+ *  - TOUCH / narrow: the options expand INLINE, in the flow, directly under
+ *    the trigger. Two earlier attempts were worse: a floating popover attached
+ *    to a control inside a sheet has nowhere to go (it flips up and covers the
+ *    context you are choosing for), and a second bottom sheet stacks a layer on
+ *    a layer — which reads as broken and gets clipped by the app dock. Inline
+ *    expansion adds no layer at all: it cannot be clipped, and the sheet you
+ *    are already in just scrolls.
  *  - POINTER / wide: an anchored popover, position:fixed so no ancestor
  *    scroller can clip it.
  */
@@ -58,7 +60,19 @@ export default function DsSelect({
   const rootRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const listId = useId();
+  const inlineRef = useRef<HTMLUListElement>(null);
   const coarse = useCoarsePointer();
+
+  // Expanding in the flow can push the list below the fold of the sheet that
+  // contains it — bring it into view rather than leaving the user to guess.
+  useEffect(() => {
+    if (!open || !coarse) return;
+    const id = window.setTimeout(
+      () => inlineRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }),
+      60,
+    );
+    return () => window.clearTimeout(id);
+  }, [open, coarse]);
 
   const selected = options.find((o) => o.value === value);
 
@@ -74,12 +88,16 @@ export default function DsSelect({
   };
 
   useEffect(() => {
-    if (!open || coarse) return;
+    if (!open) return;
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target as HTMLElement;
       if (rootRef.current?.contains(target) || target.closest?.('.ds-select-pop')) return;
       setOpen(false);
     };
+    if (coarse) {
+      document.addEventListener('pointerdown', onPointerDown);
+      return () => document.removeEventListener('pointerdown', onPointerDown);
+    }
     const reflow = () => measure();
     document.addEventListener('pointerdown', onPointerDown);
     window.addEventListener('resize', reflow);
@@ -179,17 +197,16 @@ export default function DsSelect({
       </button>
 
       {open && coarse && (
-        <div className="ds-sheet-root" role="dialog" aria-modal="true" aria-label={label}>
-          <button className="ds-sheet-backdrop" aria-label="Close" onClick={() => setOpen(false)} />
-          <div className="ds-sheet-panel">
-            <div className="ds-sheet-grip" aria-hidden="true" />
-            <p className="ds-sheet-title">{label}</p>
-            <ul className="ds-sheet-list scroll-y" role="listbox" id={listId} aria-label={label}>
-              {options.length === 0 && <li className="ds-select-empty">No options</li>}
-              {optionRows}
-            </ul>
-          </div>
-        </div>
+        <ul
+          className="ds-select-inline scroll-y"
+          role="listbox"
+          id={listId}
+          aria-label={label}
+          ref={inlineRef}
+        >
+          {options.length === 0 && <li className="ds-select-empty">No options</li>}
+          {optionRows}
+        </ul>
       )}
 
       {open && !coarse && (

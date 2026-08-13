@@ -1,5 +1,13 @@
 import type { DataProvider } from './dataProvider';
-import type { Asset, AssetSearch, ListQuery, PageResult } from './types';
+import type {
+  Asset,
+  AssetSearch,
+  ListQuery,
+  PageResult,
+  WorkOrder,
+  WorkOrderDraft,
+  WorkOrderTask,
+} from './types';
 
 // Fixtures mirror the shape (and flavor) of the real org's seeded demo data so
 // switching ?mock=1 on/off doesn't change what the UI has to handle. Note the
@@ -43,13 +51,39 @@ const assets: Asset[] = [
   { id: 3006, name: 'Campus Chiller CH-01', category: 'HVAC', spaceId: 1001, spaceName: 'Greenfield Business Park', qrVal: 'facilio_3006' },
 ];
 
-const workOrders = [
-  { id: 4001, subject: 'AHU-03 vibration above threshold', status: 'Open', priority: 'High', siteId: 1001, assignedTo: 'Priya', dueDate: '2026-08-15T17:00:00Z', createdTime: '2026-08-12T09:14:00Z' },
-  { id: 4002, subject: 'Quarterly UPS battery inspection', status: 'Open', priority: 'Medium', siteId: 1001, assignedTo: 'Arun', dueDate: '2026-08-20T12:00:00Z', createdTime: '2026-08-10T08:00:00Z' },
-  { id: 4003, subject: 'Conveyor M-114 belt replacement', status: 'In Progress', priority: 'High', siteId: 1002, assignedTo: 'Raj', dueDate: '2026-08-14T10:00:00Z', createdTime: '2026-08-11T15:40:00Z' },
-  { id: 4004, subject: 'Pump P-07 seal leak', status: 'On Hold', priority: 'Low', siteId: 1002, dueDate: '2026-08-28T09:00:00Z', createdTime: '2026-08-09T11:05:00Z' },
-  { id: 4005, subject: 'Isolation room pressure check', status: 'Closed', priority: 'High', siteId: 1003, assignedTo: 'Priya', dueDate: '2026-08-08T16:00:00Z', createdTime: '2026-08-05T07:30:00Z' },
+// Mutable on purpose — status changes, task ticks and creates hit these arrays
+// so the mock behaves like a live org within a session.
+const workOrders: WorkOrder[] = [
+  { id: 4001, subject: 'AHU-03 vibration above threshold', status: 'Open', priority: 'High', resourceId: 3001, resourceName: 'AHU-03', assignedTo: 'Priya', dueDate: '2026-08-15T17:00:00Z', createdTime: '2026-08-12T09:14:00Z' },
+  { id: 4002, subject: 'Quarterly UPS battery inspection', status: 'Open', priority: 'Medium', resourceId: 3002, resourceName: 'UPS-A2', assignedTo: 'Arun', dueDate: '2026-08-20T12:00:00Z', createdTime: '2026-08-10T08:00:00Z' },
+  { id: 4003, subject: 'Conveyor M-114 belt replacement', status: 'In Progress', priority: 'High', resourceId: 3003, resourceName: 'Conveyor Motor M-114', assignedTo: 'Raj', dueDate: '2026-08-14T10:00:00Z', createdTime: '2026-08-11T15:40:00Z' },
+  { id: 4004, subject: 'Pump P-07 seal leak', status: 'On Hold', priority: 'Low', resourceId: 3004, resourceName: 'Feed Pump P-07', dueDate: '2026-08-28T09:00:00Z', createdTime: '2026-08-09T11:05:00Z' },
+  { id: 4005, subject: 'Isolation room pressure check', status: 'Closed', priority: 'High', resourceId: 3005, resourceName: 'Isolation Room AHU', assignedTo: 'Priya', dueDate: '2026-08-08T16:00:00Z', createdTime: '2026-08-05T07:30:00Z' },
 ];
+
+const tasksByWo = new Map<number, WorkOrderTask[]>([
+  [4001, [
+    { id: 5001, subject: 'Isolate the unit and lock out power', closed: true },
+    { id: 5002, subject: 'Measure vibration at bearing housings', closed: false },
+    { id: 5003, subject: 'Check belt tension and alignment', closed: false },
+  ]],
+  [4003, [
+    { id: 5010, subject: 'Drain conveyor line and remove guard', closed: false },
+    { id: 5011, subject: 'Replace drive belt', closed: false },
+  ]],
+]);
+
+// Mirrors the real org's moduleState allowed_values (label/value pairs).
+const statusCatalogue = [
+  { label: 'Open', value: 'Open' },
+  { label: 'In Progress', value: 'In Progress' },
+  { label: 'On Hold', value: 'On Hold' },
+  { label: 'Resolved', value: 'Resolved' },
+  { label: 'Closed', value: 'Closed' },
+  { label: 'Cancelled', value: 'Cancelled' },
+];
+
+let nextWoId = 4100;
 
 const LATENCY_MS = 150;
 
@@ -135,4 +169,53 @@ export const mockProvider: DataProvider = {
   },
 
   listWorkOrders: (q) => paginate(workOrders, q),
+
+  async listWorkOrdersForAssets(assetIds: number[]) {
+    return delay(workOrders.filter((wo) => assetIds.includes(wo.resourceId ?? -1)));
+  },
+
+  async getWorkOrder(id: number) {
+    return delay(workOrders.find((wo) => wo.id === id) ?? null);
+  },
+
+  async listWorkOrderTasks(workOrderId: number) {
+    return delay([...(tasksByWo.get(workOrderId) ?? [])]);
+  },
+
+  async setWorkOrderTaskStatus(workOrderId: number, taskId: number, closed: boolean) {
+    const task = tasksByWo.get(workOrderId)?.find((t) => t.id === taskId);
+    if (!task) throw new Error(`Task ${taskId} not found on WO ${workOrderId}`);
+    task.closed = closed;
+    return delay(undefined);
+  },
+
+  async getWorkOrderStatuses() {
+    return delay([...statusCatalogue]);
+  },
+
+  async changeWorkOrderStatus(workOrderId: number, status: string) {
+    const wo = workOrders.find((w) => w.id === workOrderId);
+    if (!wo) throw new Error(`Work order ${workOrderId} not found`);
+    if (!statusCatalogue.some((s) => s.value === status)) {
+      throw new Error(`"${status}" is not in the status catalogue`);
+    }
+    wo.status = status;
+    return delay(undefined);
+  },
+
+  async createWorkOrder(draft: WorkOrderDraft) {
+    const id = nextWoId++;
+    const asset = draft.resourceId ? assets.find((a) => a.id === draft.resourceId) : undefined;
+    workOrders.unshift({
+      id,
+      subject: draft.subject,
+      description: draft.description,
+      status: 'Open',
+      priority: 'Medium',
+      resourceId: draft.resourceId,
+      resourceName: asset?.name,
+      createdTime: new Date().toISOString(),
+    });
+    return delay(id);
+  },
 };

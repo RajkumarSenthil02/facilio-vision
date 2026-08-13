@@ -1,9 +1,13 @@
 import { useBuildings, useFloors, useSites } from '../api/hooks';
+import DsSelect from './DsSelect';
 import { useLocationScope } from '../state/LocationContext';
 
+const ALL = '';
+
 /**
- * Site → building → floor cascade. Every level is optional — picking just a
- * site is a valid scope. Selections persist for the session (LocationContext).
+ * Site → building → floor cascade on DS selects (standing rule: no native
+ * controls). Every level is optional — picking just a site is a valid scope.
+ * Selections persist for the session (LocationContext).
  */
 export default function LocationPicker() {
   const { scope, names, setLocation, clearLocation } = useLocationScope();
@@ -23,73 +27,58 @@ export default function LocationPicker() {
 
   return (
     <div className="location-picker">
-      <label>
-        <span className="muted small">Site</span>
-        <select
-          value={scope.siteId ?? ''}
-          onChange={(e) => {
-            const id = e.target.value ? Number(e.target.value) : undefined;
-            const site = siteOptions.find((s) => s.id === id);
-            setLocation({
-              scope: { siteId: id },
-              names: { site: site?.name },
-            });
-          }}
-        >
-          <option value="">All sites</option>
-          {siteOptions.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <DsSelect
+        label="Site"
+        value={String(scope.siteId ?? ALL)}
+        placeholder="All sites"
+        options={[
+          { value: ALL, label: 'All sites' },
+          ...siteOptions.map((s) => ({ value: String(s.id), label: s.name })),
+        ]}
+        onChange={(raw) => {
+          const id = raw ? Number(raw) : undefined;
+          const site = siteOptions.find((s) => s.id === id);
+          setLocation({ scope: { siteId: id }, names: { site: site?.name } });
+        }}
+      />
 
-      <label>
-        <span className="muted small">Building</span>
-        <select
-          value={scope.buildingId ?? ''}
-          disabled={!scope.siteId}
-          onChange={(e) => {
-            const id = e.target.value ? Number(e.target.value) : undefined;
-            const building = buildingOptions.find((b) => b.id === id);
-            setLocation({
-              scope: { siteId: scope.siteId, buildingId: id },
-              names: { site: names.site, building: building?.name },
-            });
-          }}
-        >
-          <option value="">All buildings</option>
-          {buildingOptions.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <DsSelect
+        label="Building"
+        value={String(scope.buildingId ?? ALL)}
+        placeholder="All buildings"
+        disabled={!scope.siteId}
+        options={[
+          { value: ALL, label: 'All buildings' },
+          ...buildingOptions.map((b) => ({ value: String(b.id), label: b.name })),
+        ]}
+        onChange={(raw) => {
+          const id = raw ? Number(raw) : undefined;
+          const building = buildingOptions.find((b) => b.id === id);
+          setLocation({
+            scope: { siteId: scope.siteId, buildingId: id },
+            names: { site: names.site, building: building?.name },
+          });
+        }}
+      />
 
-      <label>
-        <span className="muted small">Floor</span>
-        <select
-          value={scope.floorId ?? ''}
-          disabled={!scope.buildingId}
-          onChange={(e) => {
-            const id = e.target.value ? Number(e.target.value) : undefined;
-            const floor = floorOptions.find((f) => f.id === id);
-            setLocation({
-              scope: { siteId: scope.siteId, buildingId: scope.buildingId, floorId: id },
-              names: { site: names.site, building: names.building, floor: floor?.name },
-            });
-          }}
-        >
-          <option value="">All floors</option>
-          {floorOptions.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <DsSelect
+        label="Floor"
+        value={String(scope.floorId ?? ALL)}
+        placeholder="All floors"
+        disabled={!scope.buildingId}
+        options={[
+          { value: ALL, label: 'All floors' },
+          ...floorOptions.map((f) => ({ value: String(f.id), label: f.name })),
+        ]}
+        onChange={(raw) => {
+          const id = raw ? Number(raw) : undefined;
+          const floor = floorOptions.find((f) => f.id === id);
+          setLocation({
+            scope: { siteId: scope.siteId, buildingId: scope.buildingId, floorId: id },
+            names: { site: names.site, building: names.building, floor: floor?.name },
+          });
+        }}
+      />
 
       {(scope.siteId || scope.buildingId || scope.floorId) && (
         <button className="link-btn" onClick={clearLocation}>

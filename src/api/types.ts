@@ -52,12 +52,36 @@ export interface WorkOrder {
   id: number;
   subject: string;
   description?: string;
+  /** moduleState label, e.g. "Open" / "Closed" — comes back as a plain string. */
   status?: string;
   priority?: string;
-  siteId?: number;
+  /** The Space/Asset lookup ("resource") this WO is raised against. */
+  resourceId?: number;
+  resourceName?: string;
   assignedTo?: string;
   dueDate?: string; // UTC ISO 8601 — convert to local time before rendering
   createdTime?: string;
+}
+
+/** One entry of the status catalogue (workorder.moduleState allowed_values). */
+export interface WorkOrderStatus {
+  label: string;
+  /** Internal status name — what change-work-order-status expects. */
+  value: string;
+}
+
+export interface WorkOrderTask {
+  id: number;
+  subject: string;
+  closed: boolean;
+}
+
+export interface WorkOrderDraft {
+  subject: string;
+  description?: string;
+  /** Plain numeric ids — the script lane takes them as-is. */
+  siteId?: number;
+  resourceId?: number;
 }
 
 /** Where the user is working. Narrower fields win (floor > building > site). */

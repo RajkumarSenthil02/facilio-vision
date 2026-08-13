@@ -1,5 +1,6 @@
 import { vibe } from './vibe';
 import { cmms, chunk, fetchAllPages, inFilter, rowsOf } from './facilioHelpers';
+import { callFn } from './scriptFns';
 import type { DataProvider } from './dataProvider';
 import type {
   Asset,
@@ -12,6 +13,9 @@ import type {
   Site,
   Space,
   WorkOrder,
+  WorkOrderDraft,
+  WorkOrderStatus,
+  WorkOrderTask,
 } from './types';
 
 // Payload keys verified against the action input schemas
@@ -69,6 +73,61 @@ interface RawAsset {
   category?: { id?: number; name?: string } | string;
   space?: { id?: number; name?: string };
   qrVal?: string;
+}
+
+// Verified row shape (list-work-orders against org #2915): moduleState and
+// priority come back as plain strings; resource is a lookup.
+interface RawWorkOrder {
+  id: number;
+  subject: string;
+  description?: string;
+  moduleState?: string | { name?: string; displayName?: string };
+  priority?: string | { name?: string };
+  resource?: { id?: number; name?: string };
+  assignedTo?: { id?: number; name?: string } | string;
+  dueDate?: string;
+  createdTime?: string;
+}
+
+// Task row shape is org-dependent; map defensively. `status`/closed flags vary
+// so treat "Closed"/"closed"/true as closed.
+interface RawTask {
+  id: number;
+  subject?: string;
+  name?: string;
+  status?: string | { name?: string };
+  statusNew?: string;
+}
+
+const WO_SELECT = 'id,subject,description,moduleState,priority,resource,assignedTo,dueDate,createdTime';
+
+function lookupName(v: string | { name?: string; displayName?: string } | undefined): string | undefined {
+  if (typeof v === 'string') return v;
+  return v?.displayName ?? v?.name;
+}
+
+function toWorkOrder(row: RawWorkOrder): WorkOrder {
+  return {
+    id: row.id,
+    subject: row.subject,
+    description: row.description,
+    status: lookupName(row.moduleState),
+    priority: lookupName(row.priority),
+    resourceId: row.resource?.id,
+    resourceName: row.resource?.name,
+    assignedTo: typeof row.assignedTo === 'string' ? row.assignedTo : row.assignedTo?.name,
+    dueDate: row.dueDate,
+    createdTime: row.createdTime,
+  };
+}
+
+function toTask(row: RawTask): WorkOrderTask {
+  const status = lookupName(row.status) ?? row.statusNew;
+  return {
+    id: row.id,
+    subject: row.subject ?? row.name ?? `Task ${row.id}`,
+    closed: typeof status === 'string' ? status.toLowerCase() === 'closed' : false,
+  };
 }
 
 function toAsset(row: RawAsset): Asset {
@@ -224,4 +283,89 @@ export const realProvider: DataProvider = {
   },
 
   listWorkOrders: (q) => list<WorkOrder>('list-work-orders', q),
+
+  async listWorkOrdersForAssets(assetIds: number[]): Promise<WorkOrder[]> {
+    if (!assetIds.length) return [];
+    const parts = await Promise.all(
+      chunk(assetIds, 50).map((part) =>
+        fetchAllPages<RawWorkOrder>('list-work-orders', {
+          select: WO_SELECT,
+          expand: 'resource',
+          filters: inFilter('resource', part),
+        }),
+      ),
+    );
+    return parts.flat().map(toWorkOrder);
+  },
+
+  async getWorkOrder(id: number): Promise<WorkOrder | null> {
+    const res = await cmms<RawWorkOrder[]>('list-work-orders', {
+      select: WO_SELECT,
+      expand: 'resource',
+      filters: inFilter('id', [id]),
+    });
+    const row = rowsOf<RawWorkOrder>(res.data)[0];
+    return row ? toWorkOrder(row) : null;
+  },
+
+  async listWorkOrderTasks(workOrderId: number): Promise<WorkOrderTask[]> {
+    const res = await cmms<RawTask[]>('list-work-order-tasks', { id: workOrderId });
+    return rowsOf<RawTask>(res.data).map(toTask);
+  },
+
+  async setWorkOrderTaskStatus(workOrderId: number, taskId: number, closed: boolean) {
+    await cmms('complete-or-reopen-work-order-task', {
+      work_order_id: workOrderId,
+      task_id: taskId,
+      task_status: closed ? 'closed' : 'open',
+    });
+  },
+
+  async getWorkOrderStatuses(): Promise<WorkOrderStatus[]> {
+    // get-work-order-metadata proxies raw HTTP: the body sits in `data.response`
+    // as a JSON string. Walk defensively rather than hardcoding the nesting.
+    const res = await cmms<unknown>('get-work-order-metadata', {});
+    let body: unknown = res.data;
+    for (let depth = 0; depth < 4; depth++) {
+      if (typeof body === 'string') {
+        try {
+          body = JSON.parse(body);
+        } catch {
+          break;
+        }
+      }
+      const obj = body as Record<string, unknown> | undefined;
+      if (obj && Array.isArray(obj.fields)) break;
+      body = obj?.response ?? obj?.data;
+      if (body === undefined) break;
+    }
+    const fields = ((body as { fields?: unknown[] })?.fields ?? []) as Array<{
+      name?: string;
+      allowed_values?: Array<{ label?: string; value?: string }>;
+    }>;
+    const moduleState = fields.find((f) => f.name === 'moduleState');
+    if (!moduleState?.allowed_values?.length) {
+      throw new Error('Could not read the work order status catalogue from metadata');
+    }
+    return moduleState.allowed_values
+      .filter((v): v is { label: string; value: string } => Boolean(v.label && v.value))
+      .map(({ label, value }) => ({ label, value }));
+  },
+
+  async changeWorkOrderStatus(workOrderId: number, status: string) {
+    await cmms('change-work-order-status', { id: workOrderId, status });
+  },
+
+  async createWorkOrder(draft: WorkOrderDraft): Promise<number> {
+    // The script lane, not create-work-order — see scriptFns.ts for why.
+    const record: Record<string, unknown> = { subject: draft.subject };
+    if (draft.description) record.description = draft.description;
+    if (draft.siteId) record.siteId = draft.siteId;
+    if (draft.resourceId) record.resource = { id: draft.resourceId };
+    const out = (await callFn('createRecord', ['workorder', record])) as { id?: number } | null;
+    if (!out?.id) {
+      throw new Error('Work order create returned no id — script lane failed, not created');
+    }
+    return out.id;
+  },
 };

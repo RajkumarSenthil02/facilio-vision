@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAsset, useAssetSearch } from '../api/hooks';
 import LocationPicker from '../components/LocationPicker';
+import WorkOrderPanel from '../components/WorkOrderPanel';
 import { useLocationScope } from '../state/LocationContext';
 
 /**
@@ -36,9 +37,7 @@ export default function PortfolioScreen() {
               {asset.data.spaceName && <span className="pill">{asset.data.spaceName}</span>}
               <span className="pill">#{asset.data.id}</span>
             </p>
-            <div className="placeholder">
-              <p>Work orders, tasks and status transitions attach here (PR-B2).</p>
-            </div>
+            <WorkOrderPanel asset={asset.data} />
           </>
         )}
       </section>

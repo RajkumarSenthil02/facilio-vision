@@ -9,6 +9,9 @@ import type {
   Site,
   Space,
   WorkOrder,
+  WorkOrderDraft,
+  WorkOrderStatus,
+  WorkOrderTask,
 } from './types';
 
 /**
@@ -41,6 +44,17 @@ export interface DataProvider {
   searchAssets(search?: AssetSearch): Promise<Asset[]>;
   getAsset(id: number): Promise<Asset | null>;
 
-  // ---- work orders (Phase 2.2+, stubs allowed until PR-B2) ----
+  // ---- work orders (Phase 2.2–2.4) ----
   listWorkOrders(query?: ListQuery): Promise<PageResult<WorkOrder>>;
+  /** WOs raised against these assets (the `resource` lookup), batched internally. */
+  listWorkOrdersForAssets(assetIds: number[]): Promise<WorkOrder[]>;
+  getWorkOrder(id: number): Promise<WorkOrder | null>;
+  listWorkOrderTasks(workOrderId: number): Promise<WorkOrderTask[]>;
+  setWorkOrderTaskStatus(workOrderId: number, taskId: number, closed: boolean): Promise<void>;
+  /** The status catalogue — workorder.moduleState allowed_values from metadata. */
+  getWorkOrderStatuses(): Promise<WorkOrderStatus[]>;
+  /** Execute a transition through the status action; `status` is the internal name. */
+  changeWorkOrderStatus(workOrderId: number, status: string): Promise<void>;
+  /** Create via the script lane — the create action itself is broken (see scriptFns.ts). */
+  createWorkOrder(draft: WorkOrderDraft): Promise<number>;
 }

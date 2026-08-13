@@ -109,6 +109,44 @@ async function runTool(
         return rows.map((w) => `#${w.id} "${w.subject}" · ${w.status ?? '—'}`).join('\n');
       }
 
+      case 'find_work_order': {
+        const text = String(call.args.text ?? '').trim().toLowerCase();
+        const rows = await deps.listOpenWorkOrders();
+        const hits = (text
+          ? rows.filter(
+              (w) =>
+                w.subject.toLowerCase().includes(text) ||
+                (w.resourceName ?? '').toLowerCase().includes(text),
+            )
+          : rows
+        ).slice(0, 6);
+        if (hits.length === 0) return 'No open work orders match that.';
+        // Ids surfaced here become navigable — same whitelist the create guard uses.
+        for (const w of hits) if (w.resourceId) seenAssetIds.add(w.resourceId);
+        return hits
+          .map(
+            (w) =>
+              `#${w.id} "${w.subject}" · asset ${w.resourceId ?? '—'} ${w.resourceName ?? ''}`.trim(),
+          )
+          .join('\n');
+      }
+
+      case 'navigate_to': {
+        const asked = num(call.args.assetId);
+        if (asked === undefined) return 'Error: navigate_to needs an assetId.';
+        if (asked !== ctx.assetInView && !seenAssetIds.has(asked)) {
+          return `Error: asset ${asked} was never shown to you — call find_asset or find_work_order first and use an id from its result.`;
+        }
+        const route = await deps.routeToAsset(asked);
+        if (!route) {
+          return `Asset ${asked} is not pinned in any survey, so there is no route to it yet.`;
+        }
+        if (route.steps.length === 0) {
+          return `${route.destination} is the destination, but no mapped path leads there yet — connect it in the Wayfinder graph.`;
+        }
+        return `Route to ${route.destination}: ${route.steps.join(' then ')}`;
+      }
+
       case 'create_work_order': {
         const subject = String(call.args.subject ?? '').trim();
         if (!subject) return 'Error: create_work_order needs a subject.';
@@ -162,7 +200,7 @@ async function runTool(
       }
 
       default:
-        return `Error: unknown tool ${call.tool}. Available: find_asset, list_work_orders, create_work_order, complete_task, reopen_task, change_status.`;
+        return `Error: unknown tool ${call.tool}. Available: find_asset, find_work_order, navigate_to, list_work_orders, create_work_order, complete_task, reopen_task, change_status.`;
     }
   } catch (err) {
     // Failures re-enter the transcript as text; the model gets to try again.

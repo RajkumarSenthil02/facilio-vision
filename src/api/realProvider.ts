@@ -54,6 +54,7 @@ interface RawBuilding {
 interface RawFloor {
   id: number;
   name: string;
+  floorlevel?: number;
   building?: { id?: number };
   site?: { id?: number };
 }
@@ -216,12 +217,13 @@ export const realProvider: DataProvider = {
 
   async listFloors(): Promise<Floor[]> {
     const rows = await fetchAllPages<RawFloor>('list-floors', {
-      select: 'id,name,building,site',
+      select: 'id,name,building,site,floorlevel',
       expand: 'building,site',
     });
     return rows.map((f) => ({
       id: f.id,
       name: f.name,
+      floorLevel: typeof f.floorlevel === 'number' ? f.floorlevel : undefined,
       buildingId: f.building?.id,
       siteId: f.site?.id,
     }));

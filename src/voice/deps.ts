@@ -9,6 +9,8 @@
  */
 import { provider } from '../api/provider';
 import { appStore } from '../api/appStore';
+import { loadGraph, nodeForSurvey, withSurveyNodes } from '../wayfinding/graph';
+import { findRoute } from '../wayfinding/router';
 import {
   draftWorkOrder,
   identifyAsset,
@@ -23,6 +25,7 @@ import type {
   WorkOrderDraft,
   WorkOrderStatus,
   WorkOrderTask,
+  Survey,
 } from '../api/types';
 
 export interface VoiceDeps {
@@ -39,6 +42,10 @@ export interface VoiceDeps {
     fileIds: number[],
     candidates: Array<{ id: number; name: string }>,
   ): Promise<IdentifyVerdict>;
+  /** Open work orders, for "take me to the HVAC that needs a filter change". */
+  listOpenWorkOrders(): Promise<WorkOrder[]>;
+  /** Resolves an asset to a route destination; null when it is not mapped. */
+  routeToAsset(assetId: number): Promise<{ destination: string; steps: string[] } | null>;
   voiceTurn(input: string): Promise<string>;
   speak(text: string): void;
 }
@@ -68,6 +75,27 @@ export const defaultDeps: VoiceDeps = {
   getStatuses: () => provider.getWorkOrderStatuses(),
   changeStatus: (workOrderId, status) => provider.changeWorkOrderStatus(workOrderId, status),
   createWorkOrder: (draft) => provider.createWorkOrder(draft),
+  listOpenWorkOrders: async () => {
+    const page = await provider.listWorkOrders({ pageSize: 50 });
+    return page.data.filter((w) => !/closed|cancelled|resolved/i.test(w.status ?? ''));
+  },
+  routeToAsset: async (assetId) => {
+    // Resolution is the agent's job; ROUTING is the router's. This just hands
+    // the destination to the same code the Wayfinder screen uses.
+    const surveys = (await appStore.kvList<Survey>('surveys', 'survey.', 200))
+      .map((r) => r.value)
+      .filter((s) => s && Array.isArray(s.markers));
+    const host = surveys.find((s) => s.markers.some((m) => m.assetId === assetId));
+    if (!host?.siteId) return null;
+    const graph = withSurveyNodes(await loadGraph(host.siteId), surveys);
+    const destination = nodeForSurvey(graph, host.id);
+    if (!destination) return null;
+    // Without a scanned position we can still name the destination; a step
+    // list needs a start, and inventing one would be a lie.
+    const start = graph.nodes.find((n) => n.kind === 'entrance');
+    const route = start ? findRoute(graph, start.id, destination.id) : null;
+    return { destination: destination.name, steps: (route?.steps ?? []).map((s) => s.text) };
+  },
   uploadPhoto: (blob, name) => appStore.uploadPhoto(blob, name),
   draftWorkOrder,
   identifyAsset,

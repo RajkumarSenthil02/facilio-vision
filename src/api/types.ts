@@ -22,6 +22,8 @@ export interface Floor {
   name: string;
   buildingId?: number;
   siteId?: number;
+  /** Facilio's own storey index — orders floors and phrases "up 3 floors". */
+  floorLevel?: number;
 }
 
 /**

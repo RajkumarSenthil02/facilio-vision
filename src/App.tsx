@@ -27,6 +27,7 @@ import RoomsScreen from './screens/RoomsScreen';
 import VoiceSheet from './screens/VoiceSheet';
 import DashboardScreen from './screens/DashboardScreen';
 import RoundsScreen, { ActiveRoundChip } from './screens/RoundsScreen';
+import WayfinderScreen from './screens/WayfinderScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import DiagnosticsScreen from './screens/DiagnosticsScreen';
 import BoomScreen from './screens/BoomScreen';
@@ -45,6 +46,7 @@ const SCREENS: ShellScreen[] = [
   { id: 'capture', label: 'Capture', icon: <CameraIcon />, visible: false, bleed: true, component: CaptureScreen },
   { id: 'rooms', label: 'Rooms', icon: <HomeIcon />, visible: false, component: RoomsScreen },
   { id: 'voice', label: 'Voice', icon: <MicIcon />, visible: false, component: VoiceSheet },
+  { id: 'wayfinder', label: 'Wayfinder', icon: <RouteIcon />, visible: true, component: WayfinderScreen },
   { id: 'rounds', label: 'Rounds', icon: <RouteIcon />, visible: false, component: RoundsScreen },
   { id: 'settings', label: 'Settings', icon: <SettingsIcon />, visible: false, component: SettingsScreen },
   { id: 'diagnostics', label: 'Diagnostics', icon: <ClipboardListIcon />, visible: false, component: DiagnosticsScreen },

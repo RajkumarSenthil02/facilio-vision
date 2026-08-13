@@ -17,6 +17,8 @@ export function fakeDeps(overrides: Partial<VoiceDeps> = {}): VoiceDeps {
     ]),
     changeStatus: vi.fn(async () => {}),
     createWorkOrder: vi.fn(async () => 4242),
+    listOpenWorkOrders: vi.fn(async () => []),
+    routeToAsset: vi.fn(async () => null),
     uploadPhoto: vi.fn(async () => 77),
     draftWorkOrder: vi.fn(async (_fileId: number, _context: string) => ({
       subject: 'Leaking flange',

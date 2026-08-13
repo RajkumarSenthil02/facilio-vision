@@ -205,6 +205,21 @@ export default function WorkOrderPanel({ asset }: { asset: Asset }) {
         <h3>Work orders</h3>
         {workOrders.data && <span className="muted small">{workOrders.data.length} linked</span>}
       </div>
+
+      {/* Work Order -> Asset -> Location -> Wayfinder. Hand the asset to the
+          Wayfinder tab rather than duplicating routing UI here. */}
+      <button
+        className="btn btn-secondary wo-navigate"
+        onClick={() => {
+          const url = new URL(window.location.href);
+          url.searchParams.set('tab', 'wayfinder');
+          url.searchParams.set('asset', String(asset.id));
+          window.history.pushState({}, '', url);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }}
+      >
+        Navigate to asset
+      </button>
       {workOrders.isLoading && <p className="muted">Loading work orders…</p>}
       {workOrders.isError && <p className="error">{(workOrders.error as Error).message}</p>}
       {workOrders.data && workOrders.data.length === 0 && (

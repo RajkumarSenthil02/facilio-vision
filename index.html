@@ -15,9 +15,17 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
+    <!-- Add-to-Home-Screen runs as a STANDALONE web app. Without the Apple
+         meta AND a manifest with display:standalone, iOS letterboxes the page
+         instead of granting it the full screen — no CSS can reclaim space the
+         OS never gave the page (the "blank band under the dock" report). -->
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Vision" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="theme-color" content="#0B1220" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Facilio Vision</title>
   </head>
   <body>

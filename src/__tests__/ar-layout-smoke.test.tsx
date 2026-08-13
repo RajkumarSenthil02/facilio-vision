@@ -11,6 +11,7 @@ import {
   ArSpace,
   DOCK_CLEAR_PX,
   __layoutForTest,
+  __resetPoseForTest,
   __setPoseForTest,
 } from '../ar/ArSpace';
 
@@ -151,6 +152,29 @@ describe('AR layout engine', () => {
     expect(left.length).toBeLessThanOrEqual(4);
     expect(right.length + left.length).toBe(shown.length);
     expect(shown.length).toBe(8); // 4 a side out of 12 markers
+  });
+
+  it('WITHOUT A POSE, NOTHING IS DRAWN — no pile in the centre of the frame', () => {
+    // The reported bug: open a survey with no compass and every marker was
+    // stacked on the crosshair, five wrong answers drawn as confidently as
+    // one right one. Hidden is the only honest output; the screen shows the
+    // "enable the compass" banner instead.
+    const markers = [0, 40, 120, 200, 300].map((heading, i) => ({
+      id: `m${i}`,
+      heading,
+      pitch: 0,
+    }));
+    const { container } = render(<Stage markers={markers} />);
+
+    __resetPoseForTest();
+    __layoutForTest();
+    expect(cardsOf(container)).toHaveLength(0);
+    expect(chevronsOf(container)).toHaveLength(0);
+
+    // and they come straight back once the sensor answers
+    __setPoseForTest(0, 0);
+    __layoutForTest();
+    expect(cardsOf(container).length).toBeGreaterThan(0);
   });
 
   it('turning to face a marker brings it back to the same spot', () => {

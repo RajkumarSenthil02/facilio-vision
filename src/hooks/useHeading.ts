@@ -18,10 +18,56 @@ export interface Orientation {
   pitch: number;
   /** false until the first sensor event lands. */
   ok: boolean;
+  /** True when the heading is north-referenced; false = arbitrary session origin. */
+  absolute: boolean;
 }
 
-const raw: Orientation = { heading: 0, pitch: 0, ok: false };
-const smoothed: Orientation = { heading: 0, pitch: 0, ok: false };
+const raw: Orientation = { heading: 0, pitch: 0, ok: false, absolute: false };
+const smoothed: Orientation = { heading: 0, pitch: 0, ok: false, absolute: false };
+
+const DEG = 180 / Math.PI;
+const RAD = Math.PI / 180;
+
+/**
+ * Where the REAR CAMERA is actually looking, from all three axes.
+ *
+ * The old maths used two: heading from alpha, pitch from `beta - 90`. That is
+ * only true while the phone is held bolt upright and unrolled. Tilt it
+ * sideways to fit a pump in frame — gamma ≠ 0 — and beta swings wildly while
+ * the camera has barely moved, so the marker was written down metres from
+ * where the technician was pointing. Held in landscape (beta ≈ 0) it read a
+ * 90° dive at the floor.
+ *
+ * So: build the device→world rotation R = Rz(a)Rx(b)Ry(g) (the DeviceOrientation
+ * spec's own composition, world = East/North/Up), and take the camera's view
+ * axis, which is the device's -Z. Azimuth and elevation then hold at every
+ * attitude, which is the whole point.
+ */
+export function lookAngles(
+  alphaDeg: number,
+  betaDeg: number,
+  gammaDeg: number,
+): { azimuth: number; elevation: number } {
+  const a = alphaDeg * RAD;
+  const b = betaDeg * RAD;
+  const g = gammaDeg * RAD;
+  const cA = Math.cos(a);
+  const sA = Math.sin(a);
+  const cB = Math.cos(b);
+  const sB = Math.sin(b);
+  const cG = Math.cos(g);
+  const sG = Math.sin(g);
+
+  // -1 × the third column of R: the outward normal of the screen, negated.
+  const east = -(cA * sG + sA * sB * cG);
+  const north = -(sA * sG - cA * sB * cG);
+  const up = -(cB * cG);
+
+  return {
+    azimuth: ((Math.atan2(east, north) * DEG) % 360 + 360) % 360,
+    elevation: Math.asin(Math.max(-1, Math.min(1, up))) * DEG,
+  };
+}
 
 /**
  * A short history of recent smoothed readings, for PLACEMENT only.
@@ -35,13 +81,16 @@ const HISTORY = 12;
 const history: Array<{ heading: number; pitch: number; at: number }> = [];
 let listening = false;
 
-function ingest(headingIn: number | null, beta: number | null) {
-  if (headingIn == null || beta == null) return;
-  const rawH = (headingIn + 360) % 360;
-  const rawP = Math.max(-90, Math.min(90, beta - 90));
+function ingest(alpha: number | null, beta: number | null, gamma: number | null, absolute: boolean) {
+  if (alpha == null || beta == null) return;
+  const { azimuth, elevation } = lookAngles(alpha, beta, gamma ?? 0);
+  const rawH = azimuth;
+  const rawP = Math.max(-90, Math.min(90, elevation));
   raw.heading = rawH;
   raw.pitch = rawP;
   raw.ok = true;
+  raw.absolute = absolute;
+  smoothed.absolute = absolute;
   if (!smoothed.ok) {
     smoothed.heading = rawH;
     smoothed.pitch = rawP;
@@ -65,24 +114,64 @@ function pushHistory(): void {
   if (history.length > HISTORY) history.shift();
 }
 
+/**
+ * Absolute readings win, and once one has landed the relative stream is
+ * ignored — otherwise the two events fight and the heading flickers between
+ * two frames of reference.
+ */
+let haveAbsolute = false;
+
 function onDeviceOrientation(e: DeviceOrientationEvent) {
   const webkit = (e as unknown as { webkitCompassHeading?: number }).webkitCompassHeading;
-  const heading = typeof webkit === 'number' ? webkit : e.alpha != null ? 360 - e.alpha : null;
-  ingest(heading, e.beta);
+  if (typeof webkit === 'number' && !Number.isNaN(webkit)) {
+    // iOS: alpha has an arbitrary origin, webkitCompassHeading is the
+    // north-referenced version of it. Convert, then use the same maths.
+    haveAbsolute = true;
+    ingest((360 - webkit) % 360, e.beta, e.gamma, true);
+    return;
+  }
+  if (e.absolute) {
+    haveAbsolute = true;
+    ingest(e.alpha, e.beta, e.gamma, true);
+    return;
+  }
+  if (haveAbsolute) return;
+  // No compass reference. The pose is still USABLE: every marker is stored
+  // relative to its survey's sweep, so a stable arbitrary origin places
+  // markers correctly against each other within the session. It is flagged
+  // `absolute: false` so nothing claims it points at true north.
+  ingest(e.alpha, e.beta, e.gamma, false);
 }
+
+export type OrientationStatus = 'idle' | 'waiting' | 'live' | 'denied' | 'unsupported';
+let permission: 'unknown' | 'granted' | 'denied' = 'unknown';
 
 function startListening() {
   if (listening) return;
   listening = true;
-  // Android exposes the compass-referenced stream on the *absolute* event.
-  const evt =
-    'ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation';
-  window.addEventListener(evt, onDeviceOrientation as EventListener, true);
+  // Android exposes the compass-referenced stream on the *absolute* event;
+  // both are attached because a device may only answer on one of them.
+  if ('ondeviceorientationabsolute' in window) {
+    window.addEventListener('deviceorientationabsolute', onDeviceOrientation as EventListener, true);
+  }
+  window.addEventListener('deviceorientation', onDeviceOrientation as EventListener, true);
+}
+
+/** What the AR layer should SAY about the sensor, rather than guessing. */
+export function orientationStatus(): OrientationStatus {
+  if (smoothed.ok) return 'live';
+  if (permission === 'denied') return 'denied';
+  if (!listening) return 'idle';
+  return typeof window !== 'undefined' && 'DeviceOrientationEvent' in window
+    ? 'waiting'
+    : 'unsupported';
 }
 
 /**
  * iOS needs a user-gesture permission; Android just starts. Safe to call
- * repeatedly — returns false when denied/unavailable.
+ * repeatedly — and it must be, because a technician who dismissed the prompt
+ * once has to be able to ask for it again from the banner rather than being
+ * locked out of placement for the rest of the session.
  */
 export async function enableArOrientation(): Promise<boolean> {
   const DOE = (
@@ -91,7 +180,11 @@ export async function enableArOrientation(): Promise<boolean> {
   try {
     if (DOE && typeof DOE.requestPermission === 'function') {
       const res = await DOE.requestPermission();
-      if (res !== 'granted') return false;
+      if (res !== 'granted') {
+        permission = 'denied';
+        return false;
+      }
+      permission = 'granted';
     }
     startListening();
     return true;
@@ -165,13 +258,16 @@ export function setOrientationForTest(heading: number | null, pitch = 0): void {
   if (heading == null) {
     raw.ok = false;
     smoothed.ok = false;
+    history.length = 0;
     return;
   }
   const h = ((heading % 360) + 360) % 360;
   raw.heading = h;
   raw.pitch = pitch;
   raw.ok = true;
+  raw.absolute = true;
   smoothed.heading = h;
   smoothed.pitch = pitch;
   smoothed.ok = true;
+  smoothed.absolute = true;
 }

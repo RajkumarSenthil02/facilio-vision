@@ -6,6 +6,8 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
+import { setOrientationForTest } from '../hooks/useHeading';
+import { __resetPoseForTest, __setPoseForTest } from '../ar/ArSpace';
 import type { GeoFix, Survey } from '../api/types';
 import {
   markerAbsBearing,
@@ -92,6 +94,22 @@ async function bootLocalized() {
   );
   return user;
 }
+
+
+// A technician reading markers is, by definition, holding a phone whose
+// compass is answering — ArSpace refuses to place a marker without a pose, so
+// jsdom (which has no sensors) has to supply one or the stage is legitimately
+// empty.
+beforeEach(() => {
+  // facing the fixture's marker (sweep base 100 + marker 30), so it is in view rather than
+  // parked on an edge chevron
+  setOrientationForTest(130);
+  __setPoseForTest(130, 0);
+});
+afterEach(() => {
+  setOrientationForTest(null);
+  __resetPoseForTest();
+});
 
 describe('presence (component)', () => {
   beforeEach(() => {

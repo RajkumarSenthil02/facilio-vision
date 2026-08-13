@@ -6,8 +6,10 @@
 // scroller — sheets and panels carry their own scrollers instead.
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
+import { setOrientationForTest } from '../hooks/useHeading';
+import { __resetPoseForTest, __setPoseForTest } from '../ar/ArSpace';
 import type { Survey } from '../api/types';
 
 const scanBus = vi.hoisted(() => ({ emit: null as ((code: string) => void) | null }));
@@ -69,6 +71,20 @@ function stageOf(container: HTMLElement): HTMLElement {
 
 afterEach(() => {
   delete (globalThis as { DeviceOrientationEvent?: unknown }).DeviceOrientationEvent;
+});
+
+
+// A technician reading markers is, by definition, holding a phone whose
+// compass is answering — ArSpace refuses to place a marker without a pose, so
+// jsdom (which has no sensors) has to supply one or the stage is legitimately
+// empty.
+beforeEach(() => {
+  setOrientationForTest(0);
+  __setPoseForTest(0, 0);
+});
+afterEach(() => {
+  setOrientationForTest(null);
+  __resetPoseForTest();
 });
 
 describe('AR HUD — mobile-native stage (mock mode)', () => {

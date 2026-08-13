@@ -111,8 +111,21 @@ function layout() {
   let edgeL = 0;
   let edgeR = 0;
   for (const n of nodes.values()) {
-    const dx = smooth.ok ? wrap(n.heading - smooth.heading) : 0;
-    const dy = smooth.ok ? smooth.pitch - n.pitch : 0;
+    // NO POSE = NO PLACE. This used to fall back to dx=dy=0, which stacked
+    // every marker in the dead centre of the frame — five different things
+    // drawn on top of each other, all of them wrong, and nothing saying so.
+    // A marker that cannot be pointed at is hidden, and the caller shows the
+    // sensor banner instead.
+    if (!smooth.ok) {
+      if (!n.hidden) {
+        n.hidden = true;
+        n.el.style.visibility = 'hidden';
+      }
+      if (n.edge) n.edge.style.display = 'none';
+      continue;
+    }
+    const dx = wrap(n.heading - smooth.heading);
+    const dy = smooth.pitch - n.pitch;
     // A marker leaves the view VERTICALLY as well as horizontally. Without
     // this it was clamped to the bottom band instead — so tilting up or down
     // slid the cards along the floor of the screen and they read as

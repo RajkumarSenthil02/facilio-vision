@@ -4,8 +4,10 @@
 // and find that note still there after the app is remounted.
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
+import { setOrientationForTest } from '../hooks/useHeading';
+import { __resetPoseForTest, __setPoseForTest } from '../ar/ArSpace';
 import type { Survey } from '../api/types';
 
 const scanBus = vi.hoisted(() => ({ emit: null as ((code: string) => void) | null }));
@@ -70,6 +72,23 @@ async function standAtStandpoint() {
   await screen.findByText(`Localized · ${SURVEY.name} · QR`);
   return user;
 }
+
+
+// A technician reading markers is, by definition, holding a phone whose
+// compass is answering — ArSpace refuses to place a marker without a pose, so
+// jsdom (which has no sensors) has to supply one or the stage is legitimately
+// empty.
+beforeEach(() => {
+  // 30° off the fixture's marker (which sits at 210 + 20 = 230°): near enough
+  // to be in view, far enough that ArGuide does not fire arrival the instant
+  // it mounts — pointing straight at it IS arrival.
+  setOrientationForTest(200);
+  __setPoseForTest(200, 0);
+});
+afterEach(() => {
+  setOrientationForTest(null);
+  __resetPoseForTest();
+});
 
 describe('AR maintenance loop (mock mode)', () => {
   it('scan → marker → work orders → task → status → note → survives a remount', async () => {

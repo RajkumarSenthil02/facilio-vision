@@ -510,3 +510,28 @@
 }
 
 .ar-action-primary .ar-dock-badge { background: rgba(255, 255, 255, 0.24); }
+
+/* "markers need the compass" — sits under the standpoint banner, never over
+   the middle of the frame. */
+.ar-nocompass {
+  position: absolute;
+  top: 132px;
+  left: 12px;
+  right: 12px;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: rgba(20, 24, 33, 0.92);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.ar-nocompass .btn-quiet {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.35);
+}

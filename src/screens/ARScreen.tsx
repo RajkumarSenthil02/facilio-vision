@@ -45,7 +45,7 @@ import { describeEntry, resolveCode } from '../vision/codes';
 import { stampStopByCode } from '../rounds/roundsStore';
 import WorkOrderPanel from '../components/WorkOrderPanel';
 import { useGeoFix } from '../hooks/useGeoFix';
-import { arOrientation, enableArOrientation, placementOrientation } from '../hooks/useHeading';
+import { arOrientation, enableArOrientation, placementOrientation, useHeading } from '../hooks/useHeading';
 import { indoorLegs, mapsDirectionsUrl, type WayLeg } from '../wayfinding/legs';
 import '../styles/ar.css';
 import '../ar/arspace.css';
@@ -179,6 +179,11 @@ const ArIcon = () => (
 export default function ARScreen() {
   const { scope, names } = useLocationScope();
   const queryClient = useQueryClient();
+
+  // Whether the sensor is ANSWERING. Markers are hidden without it (ArSpace
+  // refuses to place what it cannot point at), so the stage has to say so
+  // rather than look empty.
+  const pose = useHeading(300);
 
   // The camera is LIVE ON OPEN — this is a camera-first app, not a page with a
   // camera on it. getUserMedia may be called without a gesture (the browser
@@ -527,15 +532,22 @@ export default function ARScreen() {
       setHint('Stand at a standpoint first — a pin belongs to a survey');
       return;
     }
+    const aim = placementOrientation();
+    if (!aim) {
+      // Typing a bearing into a box was never placement — it was a guess,
+      // saved with the same authority as a real reading and then drawn as
+      // fact. Ask for the sensor instead.
+      void enableArOrientation();
+      setHint('No orientation yet — allow Motion & Orientation Access, then point and pin');
+      return;
+    }
     const base = activeSurvey.sweep[0]?.heading ?? 0;
     const delta = presence?.delta ?? 0;
-    const aim = placementOrientation();
-    setPinPoint(
-      aim
-        ? { rel: ((aim.heading - delta - base) % 360 + 360) % 360, pitch: aim.pitch, known: true }
-        : // no compass: a spread suggestion the form makes editable
-          { rel: (activeSurvey.markers.length * 40) % 360, pitch: 0, known: false },
-    );
+    setPinPoint({
+      rel: ((aim.heading - delta - base) % 360 + 360) % 360,
+      pitch: aim.pitch,
+      known: true,
+    });
     setNoteText('');
     setSheet('pin');
   };
@@ -731,6 +743,17 @@ export default function ARScreen() {
             <path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z" />
           </svg>
           {activeSurvey.name} · {markers.length} marker{markers.length === 1 ? '' : 's'}
+        </div>
+      )}
+
+      {/* No pose = markers hidden. Say it, and offer the only fix there is. */}
+      {arOn && activeSurvey && presence && markers.length > 0 && !pose.ok && (
+        <div className="ar-nocompass">
+          <Icon name="compass" size={16} />
+          <span>Markers need the compass — allow Motion &amp; Orientation Access</span>
+          <button className="btn-quiet" onClick={() => void enableArOrientation()}>
+            Enable
+          </button>
         </div>
       )}
 
@@ -958,9 +981,7 @@ export default function ARScreen() {
         }}
       >
         <p className="sv-help" style={{ marginTop: 0 }}>
-          {pinPoint?.known
-            ? 'Direction captured — you can lower the phone to type.'
-            : 'No compass reading, so set the direction on the next screen.'}
+Aim captured — lower the phone to type, the pin stays where you pointed.
         </p>
         <div className="ar-pin-kinds">
           {(
@@ -1022,20 +1043,6 @@ export default function ARScreen() {
           )
         }
       >
-        {pinPoint && !pinPoint.known && (
-          <label className="field">
-            <span>Direction (0–359°)</span>
-            <input
-              inputMode="numeric"
-              value={String(Math.round(pinPoint.rel))}
-              onChange={(e) => {
-                const n = Number(e.target.value);
-                if (Number.isFinite(n)) setPinPoint({ ...pinPoint, rel: ((n % 360) + 360) % 360 });
-              }}
-            />
-          </label>
-        )}
-
         {pinKind === 'asset' ? (
           <PinAssetPicker onPick={(asset) => void commitPin(asset)} busy={pinBusy} />
         ) : (

@@ -40,10 +40,23 @@
   :root { --app-h: max(100dvh, var(--app-h-px, 0px)); }
 }
 
-html, body, #root {
-  height: var(--app-h);
+html, body {
+  height: 100%;
   overflow: hidden;
   overscroll-behavior: none; /* kill rubber-band / pull-to-refresh */
+}
+
+/* THE root is FIXED to the viewport box. Every sizing approach that computes
+   a height (vh, dvh, JS measurements) has now been caught lying in some
+   browser state — Safari toolbar collapse, the Facilio in-app browser's
+   chrome, keyboard transitions. `position: fixed; inset: 0` is not a
+   computation: the engine keeps a fixed box glued to the initial containing
+   block itself, in every state, with no event needed. Bands are impossible. */
+#root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
@@ -124,7 +137,9 @@ html.kb-open #root { transform: translateY(var(--vv-top, 0px)); }
 /* ---- app frame ---- */
 
 .app {
-  height: var(--app-h);
+  /* direct child of the FIXED root: 100% here is the true viewport box,
+     no unit or measurement in the chain at all */
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;

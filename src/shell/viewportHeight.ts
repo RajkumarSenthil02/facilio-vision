@@ -22,6 +22,15 @@ export function installViewportHeight(): void {
   /** Anything smaller than this is browser chrome settling, not a keyboard. */
   const KEYBOARD_MIN_PX = 120;
 
+  // A fixed inset-0 probe: its offsetHeight IS the initial containing block,
+  // whatever innerHeight/visualViewport claim — the same guarantee the fixed
+  // #root relies on, exposed as a number for the surfaces that need one.
+  const probe = document.createElement('div');
+  probe.setAttribute('aria-hidden', 'true');
+  probe.style.cssText =
+    'position:fixed;inset:0;visibility:hidden;pointer-events:none;z-index:-1;';
+  (document.body ?? document.documentElement).appendChild(probe);
+
   const apply = () => {
     const vv = window.visualViewport;
     const vvH = vv?.height ?? window.innerHeight;
@@ -31,7 +40,7 @@ export function installViewportHeight(): void {
     // the dock floating above a dead band. Trust the larger measurement then.
     const editing = !!document.activeElement?.matches?.('input, textarea, [contenteditable]');
     const keyboard = editing && window.innerHeight - vvH > KEYBOARD_MIN_PX;
-    const h = keyboard ? vvH : Math.max(vvH, window.innerHeight);
+    const h = keyboard ? vvH : Math.max(vvH, window.innerHeight, probe.offsetHeight);
     // JS writes the MEASUREMENT; CSS derives --app-h as max(100dvh, this).
     // The engine's dvh is definitionally right across browser-chrome states
     // (including in-app webviews whose collapsing bars misreport through

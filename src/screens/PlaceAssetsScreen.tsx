@@ -96,6 +96,8 @@ export default function PlaceAssetsScreen({
   const [markerForm, setMarkerForm] = useState<MarkerDraft | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
   const [qrDraft, setQrDraft] = useState('');
+  /** Sweep-frame JPEGs by frame index, uploaded at save. */
+  const shotsRef = useRef<Record<number, Blob>>({});
   const qrCode: string | null = qrDraft.trim() || null;
   const busyRef = useRef(false);
 
@@ -149,9 +151,22 @@ export default function PlaceAssetsScreen({
     try {
       const src = sweepFrameSource?.() ?? cameraFrame();
       const vec = src ? await getEmbedFn()(src) : syntheticVec(heading);
-      setFrames((prev) =>
-        prev.length >= MAX_FRAMES ? prev : [...prev, { heading, pitch, vec }],
-      );
+
+      // Keep the frame's PICTURE too, not just its embedding. Held in memory
+      // and uploaded at save, so abandoning a sweep costs no uploads and the
+      // sweep itself stays responsive.
+      let shot: Blob | null = null;
+      try {
+        shot = await camera.snap(640, 0.6);
+      } catch {
+        /* a frame without a photo still recognises the room */
+      }
+
+      setFrames((prev) => {
+        if (prev.length >= MAX_FRAMES) return prev;
+        if (shot) shotsRef.current[prev.length] = shot;
+        return [...prev, { heading, pitch, vec }];
+      });
     } finally {
       busyRef.current = false;
     }
@@ -209,6 +224,24 @@ export default function PlaceAssetsScreen({
     setSaving(true);
     try {
       const id = `sv-${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+
+      // Upload the sweep photos in parallel. A failed upload costs that frame
+      // its picture, never the survey — recognition only needs the embedding.
+      setHint('Saving sweep photos…');
+      const shots = shotsRef.current;
+      const withPhotos = await Promise.all(
+        frames.map(async (frame, index) => {
+          const blob = shots[index];
+          if (!blob) return frame;
+          try {
+            const fileId = await appStore.uploadPhoto(blob, `${id}-sweep-${index}.jpg`);
+            return { ...frame, fileId };
+          } catch {
+            return frame;
+          }
+        }),
+      );
+
       const survey: Survey = {
         id,
         name: name.trim() || 'Untitled survey',
@@ -219,7 +252,7 @@ export default function PlaceAssetsScreen({
         geo: getFix(), // null is fine — indoors is the normal case
         qrCode: qrCode ?? undefined,
         qrHeading: qrCode ? qrHeading : undefined,
-        sweep: frames,
+        sweep: withPhotos,
         markers,
         modelId: EMBED_MODEL_ID,
         createdAt: new Date().toISOString(),

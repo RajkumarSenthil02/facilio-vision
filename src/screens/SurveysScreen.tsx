@@ -14,6 +14,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { appStore } from '../api/appStore';
 import type { Survey, SurveyMarker } from '../api/types';
 import { QrCode, printQrLabel } from '../ar/QrCode';
+import LookAround from '../ar/LookAround';
 import Sheet from '../components/Sheet';
 import Icon from '../components/Icon';
 import LocationPicker from '../components/LocationPicker';
@@ -282,6 +283,11 @@ function SurveyDetail({ survey, onBack }: { survey: Survey; onBack: () => void }
           {hint}
         </p>
       )}
+
+      <div className="section-row">
+        <span className="section-label">Look around</span>
+      </div>
+      <LookAround survey={survey} />
 
       <div className="section-row">
         <span className="section-label">Markers ({survey.markers.length})</span>

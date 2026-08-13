@@ -141,6 +141,16 @@ export interface SweepFrame {
   pitch: number;
   /** int8+base64 quantised embedding {q, s, dim} (vision/quantize). */
   vec: { q: string; s: number; dim: number };
+  /**
+   * The frame's own photo in the app file store.
+   *
+   * Sweeps used to keep only the embedding, which is enough to recognise a
+   * room but shows a vendor nothing. Keeping the image too turns the sweep
+   * into a look-around of the room with the markers drawn on it — which is
+   * what someone arriving cold actually needs. Optional: surveys captured
+   * before this simply have no viewer.
+   */
+  fileId?: number;
 }
 
 /**

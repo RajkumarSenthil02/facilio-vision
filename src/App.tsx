@@ -5,6 +5,7 @@ import { detectEmbed } from './shell/embed';
 import { installGlobalErrorHandlers, onGlobalError } from './shell/globalErrors';
 import { createAppQueryClient, createPersistOptions } from './api/queryClient';
 import { onQueueChange, flushQueue } from './api/offlineQueue';
+import { onAppStoreStatus } from './api/appStore';
 import { LocationProvider } from './state/LocationContext';
 import {
   AppShell,
@@ -53,6 +54,7 @@ const SCREENS: ShellScreen[] = [
 export default function App() {
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [pendingWrites, setPendingWrites] = useState(0);
+  const [storeDown, setStoreDown] = useState<string | null>(null);
   const embed = detectEmbed();
 
   const queryClient = useMemo(createAppQueryClient, []);
@@ -60,6 +62,7 @@ export default function App() {
 
   useEffect(() => onGlobalError(setGlobalError), []);
   useEffect(() => onQueueChange(setPendingWrites), []);
+  useEffect(() => onAppStoreStatus(setStoreDown), []);
 
   return (
     <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
@@ -70,6 +73,11 @@ export default function App() {
             <button onClick={() => setGlobalError(null)} aria-label="Dismiss">
               ×
             </button>
+          </div>
+        )}
+        {storeDown && (
+          <div className="notice-banner" role="status">
+            <span>{storeDown}</span>
           </div>
         )}
         {pendingWrites > 0 && (

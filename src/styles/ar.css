@@ -67,7 +67,7 @@
 
 /* ---------- chip taxonomy (foundation 01) ---------- */
 
-/* Top band: site chip left, 56px action rail right. Everything clears the
+/* Top band: site chip left, 46px action rail right. Everything clears the
    notch / Dynamic Island via --safe-t; the band itself is click-through so
    the camera below stays tappable. */
 .ar-top {
@@ -105,7 +105,7 @@
 
 .ar-chip-site .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* vertical rail — 56px squares, 10px apart, 12px radius */
+/* vertical rail — 46px squares, 8px apart, 10px radius */
 .ar-rail {
   display: flex;
   flex-direction: column;
@@ -114,8 +114,8 @@
 }
 
 .ar-rail-btn {
-  width: 56px;
-  height: 56px;
+  width: 46px;
+  height: 46px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -149,7 +149,7 @@
   align-items: center;
   gap: 8px;
   max-width: 100%;
-  min-height: 32px;
+  min-height: 30px;
   padding: 0 14px;
   border-radius: var(--radius-pill);
   background: rgba(16, 24, 38, 0.85);
@@ -206,7 +206,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  min-height: 32px;
+  min-height: 30px;
   padding: 0 14px;
   background: rgba(41, 160, 30, 0.94);
   border: none;
@@ -431,7 +431,7 @@
 
 .ar-action {
   flex: 1;
-  min-height: 52px;
+  min-height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -83,9 +83,9 @@ export default function SurveysScreen() {
         </div>
 
         {surveys.isLoading && <p className="sv-status">Loading surveys…</p>}
-        {surveys.isError && (
-          <p className="sv-status error">{(surveys.error as Error).message}</p>
-        )}
+        {/* Never dump an exception into the content area — the store's own
+            unavailability notice is shown once, app-wide. */}
+        {surveys.isError && <p className="sv-status">Couldn't load surveys. Pull to retry.</p>}
 
         {!surveys.isLoading && rows.length === 0 && (
           <p className="empty-card">

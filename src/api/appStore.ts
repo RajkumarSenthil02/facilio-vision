@@ -32,26 +32,83 @@ const SEED_KEY = '__seed__';
 
 const FN = 'fvApi';
 
+/**
+ * The app store lives in a Studio function that is published PER CHANNEL.
+ * A build promoted to production without its function promoted alongside it
+ * answers every call with 404 "app not found" — and a whole screen used to
+ * die on that, painting a raw exception where the content should be.
+ *
+ * READS therefore degrade to empty: the screen renders its normal empty state
+ * and the app raises ONE quiet, app-level notice. WRITES still throw — a save
+ * that did not happen must never look like it did.
+ */
+let unavailableReason: string | null = null;
+const statusListeners = new Set<(reason: string | null) => void>();
+
+export function onAppStoreStatus(listener: (reason: string | null) => void): () => void {
+  statusListeners.add(listener);
+  listener(unavailableReason);
+  return () => statusListeners.delete(listener);
+}
+
+function setUnavailable(reason: string | null) {
+  if (unavailableReason === reason) return;
+  unavailableReason = reason;
+  for (const listener of statusListeners) listener(reason);
+}
+
+/** A 404 / "app not found" means the store is not published on this channel. */
+function isStoreMissing(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  return /404|app not found|function not found/i.test(message);
+}
+
+/** Reads: swallow a missing store, surface everything else. */
+async function read<T>(run: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    const value = await run();
+    setUnavailable(null);
+    return value;
+  } catch (err) {
+    if (isStoreMissing(err)) {
+      setUnavailable('The app store is not published on this channel yet — saved data is unavailable.');
+      return fallback;
+    }
+    throw err;
+  }
+}
+
 const realStore: AppStore = {
   async kvPut(collection, key, value) {
     await vibe.executeFunction(FN, 'kvPut', { collection, key, value: JSON.stringify(value) });
+    setUnavailable(null);
   },
 
   async kvGet<T>(collection: Collection, key: string): Promise<T | null> {
-    const row = (await vibe.executeFunction(FN, 'kvGet', { collection, key })) as {
-      value?: string;
-    } | null;
-    if (!row?.value) return null;
-    return JSON.parse(row.value) as T;
+    return read(
+      async () => {
+        const row = (await vibe.executeFunction(FN, 'kvGet', { collection, key })) as {
+          value?: string;
+        } | null;
+        if (!row?.value) return null;
+        return JSON.parse(row.value) as T;
+      },
+      null,
+    );
   },
 
   async kvList<T>(collection: Collection, prefix = '', limit = 100): Promise<KvEntry<T>[]> {
-    const res = (await vibe.executeFunction(FN, 'kvList', { collection, prefix, limit })) as {
-      rows?: Array<{ key: string; value: string }>;
-    };
-    return (res.rows ?? [])
-      .filter((row) => row.key !== SEED_KEY)
-      .map((row) => ({ key: row.key, value: JSON.parse(row.value) as T }));
+    return read(
+      async () => {
+        const res = (await vibe.executeFunction(FN, 'kvList', { collection, prefix, limit })) as {
+          rows?: Array<{ key: string; value: string }>;
+        };
+        return (res.rows ?? [])
+          .filter((row) => row.key !== SEED_KEY)
+          .map((row) => ({ key: row.key, value: JSON.parse(row.value) as T }));
+      },
+      [] as KvEntry<T>[],
+    );
   },
 
   async kvDelete(collection, key) {

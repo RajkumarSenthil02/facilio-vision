@@ -28,18 +28,50 @@ export default function DsSelect({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  // The popup is position:FIXED and measured off the trigger. Absolute
+  // positioning was being clipped by whatever scroller contained the select
+  // (sheet bodies especially), so the list escaped its panel and overlapped
+  // the screen below it.
+  const [rect, setRect] = useState<{ left: number; top: number; width: number; drop: 'down' | 'up' } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const listId = useId();
+
+  const measure = () => {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const below = window.innerHeight - r.bottom;
+    // Flip upward when there isn't room beneath (the common case for a select
+    // near the bottom of a sheet).
+    const drop: 'down' | 'up' = below < 200 && r.top > below ? 'up' : 'down';
+    setRect({
+      left: r.left,
+      top: drop === 'down' ? r.bottom + 4 : r.top - 4,
+      width: r.width,
+      drop,
+    });
+  };
 
   const selected = options.find((o) => o.value === value);
 
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if ((target as HTMLElement).closest?.('.ds-select-pop')) return;
+      setOpen(false);
     };
+    const reflow = () => measure();
     document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
+    window.addEventListener('resize', reflow);
+    window.addEventListener('scroll', reflow, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('resize', reflow);
+      window.removeEventListener('scroll', reflow, true);
+    };
   }, [open]);
 
   useEffect(() => {
@@ -87,7 +119,11 @@ export default function DsSelect({
         aria-label={label}
         className={open ? 'ds-select-btn open' : 'ds-select-btn'}
         disabled={disabled}
-        onClick={() => setOpen((o) => !o)}
+        ref={btnRef}
+        onClick={() => {
+          measure();
+          setOpen((o) => !o);
+        }}
         onKeyDown={onKeyDown}
       >
         <span className={selected ? 'ds-select-value' : 'ds-select-value placeholder'}>
@@ -98,7 +134,23 @@ export default function DsSelect({
         </svg>
       </button>
       {open && (
-        <ul className="ds-select-pop" role="listbox" id={listId} aria-label={label}>
+        <ul
+          className={rect?.drop === 'up' ? 'ds-select-pop up' : 'ds-select-pop'}
+          role="listbox"
+          id={listId}
+          aria-label={label}
+          style={
+            rect
+              ? {
+                  left: rect.left,
+                  width: rect.width,
+                  ...(rect.drop === 'down'
+                    ? { top: rect.top }
+                    : { bottom: window.innerHeight - rect.top }),
+                }
+              : undefined
+          }
+        >
           {options.length === 0 && <li className="ds-select-empty">No options</li>}
           {options.map((option, index) => (
             <li

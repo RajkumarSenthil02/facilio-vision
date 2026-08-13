@@ -18,6 +18,7 @@ import Sheet from '../components/Sheet';
 import Icon from '../components/Icon';
 import LocationPicker from '../components/LocationPicker';
 import { useLocationScope } from '../state/LocationContext';
+import { provider } from '../api/provider';
 import { getCodeEntry, linkCode, unlinkCode } from '../vision/codes';
 import { normalizeCode } from '../vision/qr';
 import PlaceAssetsScreen from './PlaceAssetsScreen';
@@ -41,6 +42,9 @@ function useSurveys() {
 
 export default function SurveysScreen() {
   const surveys = useSurveys();
+  // Which org am I looking at? Records are per-org, and the app is reachable
+  // by users who belong to several — so never leave it implicit.
+  const me = useQuery({ queryKey: ['me'], queryFn: () => provider.getCurrentUser() });
   const { names } = useLocationScope();
   const [openId, setOpenId] = useState<string | null>(null);
   const [authoring, setAuthoring] = useState(false);
@@ -60,7 +64,10 @@ export default function SurveysScreen() {
     <section className="screen sv-screen">
       <header className="sv-head">
         <div className="sv-head-row">
-          <h2 className="sv-h1">Surveys</h2>
+          <span className="sv-title-wrap">
+            <h2 className="sv-h1">Surveys</h2>
+            {me.data && <span className="sv-org">Org {me.data.org.orgId}</span>}
+          </span>
           <button
             className="sv-chip"
             aria-label={`Working scope: ${scopeLabel}`}

@@ -54,6 +54,43 @@ export function createAppQueryClient(): QueryClient {
 }
 
 const STORAGE_KEY = 'fv.queryCache';
+const IDENTITY_KEY = 'fv.cacheIdentity';
+
+/**
+ * The persisted cache is keyed by ONE storage slot and survives 24h — so a
+ * session that once read org A's sites will happily rehydrate them while
+ * signed into org B, and `refetchOnMount` only replaces them *after* the stale
+ * paint (or never, if the refetch is slow or failing). That is how another
+ * org's records end up on screen.
+ *
+ * Records are per-org, so the cache must be too: whenever the signed-in
+ * identity differs from the one the cache was written under, the cache is
+ * dropped before anything can render from it.
+ *
+ * Returns true when a purge happened.
+ */
+export function reconcileCacheIdentity(
+  orgId: number,
+  userId: number,
+  storage: Storage = window.localStorage,
+): boolean {
+  const identity = `${orgId}:${userId}`;
+  let previous: string | null = null;
+  try {
+    previous = storage.getItem(IDENTITY_KEY);
+  } catch {
+    return false; // storage blocked (third-party iframe) — nothing persisted anyway
+  }
+  if (previous === identity) return false;
+
+  try {
+    storage.removeItem(STORAGE_KEY);
+    storage.setItem(IDENTITY_KEY, identity);
+  } catch {
+    /* best effort */
+  }
+  return previous !== null; // first run isn't a "switch", just a first write
+}
 
 export function createPersistOptions(
   storage: Storage = window.localStorage,

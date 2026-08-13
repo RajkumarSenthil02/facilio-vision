@@ -364,6 +364,8 @@ export const realProvider: DataProvider = {
     if (draft.description) record.description = draft.description;
     if (draft.siteId) record.siteId = draft.siteId;
     if (draft.resourceId) record.resource = { id: draft.resourceId };
+    // location lands via the space lookup — site alone leaves building/space blank
+    if (draft.spaceId) record.space = { id: draft.spaceId };
     const out = (await callFn('createRecord', ['workorder', record])) as { id?: number } | null;
     if (!out?.id) {
       throw new Error('Work order create returned no id — script lane failed, not created');

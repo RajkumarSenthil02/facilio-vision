@@ -10,15 +10,25 @@ interface RecognitionLike {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
-  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onresult:
+    | ((e: {
+        results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal?: boolean }>;
+      }) => void)
+    | null;
   onend: (() => void) | null;
   onerror: (() => void) | null;
   start(): void;
   stop(): void;
 }
 
-export function useVoice(onCommand: (text: string) => void) {
+export function useVoice(
+  onCommand: (text: string) => void,
+  onInterim?: (finalText: string, pendingText: string) => void,
+) {
   const [listening, setListening] = useState(false);
+  const interimRef = useRef(onInterim);
+  interimRef.current = onInterim;
+  const finalRef = useRef('');
   const [supported] = useState(
     () =>
       typeof window !== 'undefined' &&
@@ -44,12 +54,29 @@ export function useVoice(onCommand: (text: string) => void) {
     const rec = new Ctor();
     rec.lang = 'en-US';
     rec.continuous = false;
-    rec.interimResults = false;
+    // interim results stream the words in as they are recognised — the Effi
+    // panel renders them live (confirmed words solid, the tail dimmed)
+    rec.interimResults = true;
     rec.onresult = (e) => {
-      const text = e.results[0]?.[0]?.transcript;
+      let final = '';
+      let pending = '';
+      for (let i = 0; i < e.results.length; i++) {
+        const r = e.results[i];
+        const t = r[0]?.transcript ?? '';
+        if (r.isFinal) final += t;
+        else pending += t;
+      }
+      interimRef.current?.(final, pending);
+      finalRef.current = final;
+    };
+    // deliver on END, not per-event: engines split finals across events, and
+    // the command must be the whole utterance
+    rec.onend = () => {
+      setListening(false);
+      const text = finalRef.current.trim();
+      finalRef.current = '';
       if (text) cbRef.current(text);
     };
-    rec.onend = () => setListening(false);
     rec.onerror = () => setListening(false);
     recRef.current = rec;
     rec.start();

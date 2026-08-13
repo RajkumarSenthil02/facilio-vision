@@ -71,6 +71,8 @@ export async function createFaultWorkOrder(
     description: draft.description,
     resourceId: assetId,
     siteId: ctx.scope?.siteId,
+    // narrowest scope wins — the WO lands with real building/space values
+    spaceId: ctx.scope?.floorId ?? ctx.scope?.buildingId,
   });
   deps.speak(`Created work order ${workOrderId}: ${draft.subject}.`);
   return workOrderId;

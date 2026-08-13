@@ -219,33 +219,46 @@
   text-overflow: ellipsis;
 }
 
-/* ---------- marker family (foundation 03) ---------- */
+/* ---------- marker family — visionOS Tier-1 nameplates ----------
+   Same language as the AR windows (visionGlass.css): dark translucent fill
+   (NOT blurred — the blur budget belongs to the windows), white .18 rim with
+   a top specular line, vibrancy-tiered text, and STATUS AS A GLOWING DOT
+   rather than an edge bar. */
 
-/* Asset tag: head + 4px status edge. Width 186–214px. */
 .ar-asset-tag {
   position: absolute;
   width: 200px;
   display: flex;
-  background: var(--hud-surface-strong);
-  border: 1px solid var(--hud-border-strong);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  align-items: flex-start;
+  background: rgba(16, 24, 38, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 12px 32px rgba(0, 0, 0, 0.4);
   text-align: left;
   padding: 0;
   cursor: pointer;
   transition: transform var(--dur-base) var(--ease-standard), opacity var(--dur-base) var(--ease-standard);
 }
 
-.ar-asset-tag .edge { width: 5px; flex: 0 0 5px; }
-.ar-asset-tag .body { flex: 1; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-height: 56px; }
-.ar-asset-tag .name { color: #fff; font-size: 15px; font-weight: 600; line-height: 20px; }
-.ar-asset-tag .sub { color: var(--hud-text-dim); font-size: 13px; line-height: 17px; }
+/* the status dot: full-saturation core + soft ring, the design's pin glow */
+.ar-asset-tag .edge {
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
+  margin: 17px 0 0 12px;
+  border-radius: 50%;
+}
+.ar-asset-tag .edge.st-red { box-shadow: 0 0 0 3px rgba(255, 69, 58, 0.28); }
+.ar-asset-tag .edge.st-amber { box-shadow: 0 0 0 3px rgba(255, 214, 10, 0.28); }
+.ar-asset-tag .edge.st-green { box-shadow: 0 0 0 3px rgba(48, 209, 88, 0.28); }
+.ar-asset-tag .body { flex: 1; padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; min-height: 52px; }
+.ar-asset-tag .name { color: rgba(255, 255, 255, 0.96); font-size: 15px; font-weight: 600; line-height: 20px; }
+.ar-asset-tag .sub { color: rgba(255, 255, 255, 0.62); font-size: 13px; line-height: 17px; }
 .ar-asset-tag .counts { display: flex; gap: 6px; padding-top: 2px; }
 
 .ar-asset-tag.selected {
-  border-color: var(--blue-500);
-  box-shadow: 0 0 0 3px rgba(0, 89, 214, 0.2), 0 12px 32px rgba(0, 0, 0, 0.4);
+  border-color: rgba(46, 209, 255, 0.7);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 0 0 3px rgba(46, 209, 255, 0.22), 0 12px 32px rgba(0, 0, 0, 0.4);
 }
 
 .ar-asset-tag.decaying { opacity: 0.5; }
@@ -256,39 +269,44 @@
   background: rgba(16, 24, 38, 0.6);
 }
 
-/* status colours: the ONLY colour that varies across the family */
-.st-red { background: var(--danger-500); }
-.st-amber { background: var(--warning-500); }
-.st-green { background: var(--success-500); }
+/* status colours: the ONLY colour that varies across the family
+   (iOS dark system palette — calibrated for dark translucency) */
+.st-red { background: #ff453a; }
+.st-amber { background: #ffd60a; }
+.st-green { background: #30d158; }
 
 .ar-count {
   display: flex;
   align-items: center;
   gap: 5px;
-  height: 24px;
+  height: 22px;
   padding: 0 9px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 500;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.96);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
+.ar-count::before { content: ''; width: 5px; height: 5px; border-radius: 50%; }
+.ar-count.open { background: rgba(255, 69, 58, 0.32); }
+.ar-count.open::before { background: #ff453a; }
+.ar-count.planned { background: rgba(255, 214, 10, 0.28); }
+.ar-count.planned::before { background: #ffd60a; }
 
-.ar-count.open { background: var(--danger-500); color: #fff; }
-.ar-count.planned { background: rgba(255, 212, 5, 0.92); color: var(--ink-900); }
-
-/* Note tag: always amber, never status-coloured. */
+/* Note tag: same nameplate glass; amber lives in the icon, not a bar. */
 .ar-note-tag {
   position: absolute;
   display: flex;
   align-items: center;
   gap: 8px;
   max-width: 210px;
-  min-height: 48px;
-  padding: 11px 13px;
-  background: rgba(16, 24, 38, 0.86);
-  border: 1px solid rgba(255, 212, 5, 0.6);
-  border-left: 5px solid var(--warning-500);
-  border-radius: var(--radius-lg);
-  color: #fff;
+  min-height: 44px;
+  padding: 10px 13px;
+  background: rgba(16, 24, 38, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 12px 32px rgba(0, 0, 0, 0.4);
+  color: rgba(255, 255, 255, 0.96);
   font-size: 14px;
   line-height: 19px;
   text-align: left;
@@ -366,7 +384,18 @@
   animation: vsRing 2s var(--ease-standard) infinite;
 }
 
-.ar-standpoint-marker .lbl { font-size: 13px; font-weight: 500; }
+.ar-standpoint-marker .lbl {
+  height: 26px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  background: rgba(16, 24, 38, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.96);
+}
 
 /* Minimized dot: 14px status colour in a 28px glass halo, slow pulse ring —
    visionOS Tier 0 (non-blurred fill: blur budget belongs to the windows). */

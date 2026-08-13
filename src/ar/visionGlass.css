@@ -368,3 +368,31 @@
 }
 .vg-ornament svg { color: var(--vg-text-2); }
 .vg-ornament:active { transform: scale(0.97); }
+
+/* full-width action in the grid */
+.vg-action-wide { grid-column: 1 / -1; }
+
+/* status transitions as capsules — one tap per state, no floating list */
+.vg-status-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.vg-status-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--vg-fill-thin);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  color: var(--vg-text-1);
+  font: 600 13px/1 inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
+.vg-status-btn:active { background: rgba(255, 255, 255, 0.2); }
+.vg-status-btn:disabled { opacity: 0.5; }
+
+/* the title bar doubles as the window's move handle */
+.vg-bar-grab { cursor: grab; touch-action: none; }
+.vg-bar-grab:active { cursor: grabbing; }

@@ -21,7 +21,6 @@ import {
 } from '../api/hooks';
 import { briefAsset } from '../api/agents';
 import type { Asset, WorkOrder } from '../api/types';
-import DsSelect from '../components/DsSelect';
 import Icon from '../components/Icon';
 import './visionGlass.css';
 
@@ -39,6 +38,9 @@ function statusTone(status?: string): 'open' | 'prog' | 'done' | 'hold' {
 const BODY_MIN = 180;
 const BODY_MAX = () => Math.round(window.innerHeight * 0.52);
 
+const OPEN_TONES = ['open', 'submitted', 'assigned', 'in progress', 'work in progress', 'processing'];
+const PLANNED_TONES = ['on hold', 'scheduled', 'pre-open', 'preopen', 'yet to start'];
+
 export default function ArWindow({
   asset,
   openCount,
@@ -48,9 +50,9 @@ export default function ArWindow({
   onMinimize,
   onVoice,
   onFault,
-  onNavigate,
 }: {
   asset: Asset;
+  /** Fallbacks while the window's own query loads. */
   openCount: number;
   plannedCount: number;
   /** Deep-link template results — null hides the ornament. */
@@ -59,12 +61,28 @@ export default function ArWindow({
   onMinimize(): void;
   onVoice(): void;
   onFault(): void;
-  onNavigate(): void;
 }) {
   const [view, setView] = useState<View>({ kind: 'home' });
   const [bodyH, setBodyH] = useState(240);
   const workOrders = useWorkOrdersForAsset(asset.id);
   const drag = useRef<{ y: number; h: number } | null>(null);
+
+  // The chips and the list must be the SAME truth. The parent's counts come
+  // from a site-wide query that can lag a just-created record; the window's
+  // own per-asset query is what the list shows, so the chips follow it.
+  const wos = workOrders.data;
+  const open = wos
+    ? wos.filter((w) => OPEN_TONES.includes((w.status ?? '').toLowerCase())).length
+    : openCount;
+  const planned = wos
+    ? wos.filter((w) => PLANNED_TONES.includes((w.status ?? '').toLowerCase())).length
+    : plannedCount;
+
+  // The asset can be up on a wall or ceiling — the pin stays on the asset,
+  // but the DIALOGUE can be pulled down to a comfortable holding position.
+  // Drag the title bar; double-tap it to snap back to the anchor.
+  const [winOff, setWinOff] = useState({ x: 0, y: 0 });
+  const barDrag = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
 
   const [brief, setBrief] = useState<{ busy: boolean; text: string | null }>({
     busy: false,
@@ -85,7 +103,10 @@ export default function ArWindow({
     view.kind === 'home' ? asset.name : view.kind === 'wos' ? 'Work orders' : `#${view.wo.id}`;
 
   return (
-    <div className="vg-anchor">
+    <div
+      className="vg-anchor"
+      style={winOff.x || winOff.y ? { transform: `translate(${winOff.x}px, ${winOff.y}px)` } : undefined}
+    >
       {/* ornament: floats OUTSIDE the window's top edge, visionOS-style */}
       {link && (
         <a className="vg-ornament" href={link} target="_blank" rel="noopener noreferrer">
@@ -95,7 +116,23 @@ export default function ArWindow({
       )}
 
       <aside className="vg-window" role="complementary" aria-label={asset.name}>
-        <header className="vg-bar">
+        <header
+          className="vg-bar vg-bar-grab"
+          onPointerDown={(e) => {
+            if ((e.target as HTMLElement).closest('button')) return;
+            barDrag.current = { x: e.clientX, y: e.clientY, ox: winOff.x, oy: winOff.y };
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+          }}
+          onPointerMove={(e) => {
+            const d = barDrag.current;
+            if (!d) return;
+            setWinOff({ x: d.ox + (e.clientX - d.x), y: d.oy + (e.clientY - d.y) });
+          }}
+          onPointerUp={() => {
+            barDrag.current = null;
+          }}
+          onDoubleClick={() => setWinOff({ x: 0, y: 0 })}
+        >
           {view.kind !== 'home' && (
             <button
               className="vg-icon-btn"
@@ -115,13 +152,31 @@ export default function ArWindow({
           {view.kind === 'home' && (
             <>
               <div className="vg-chip-row">
-                {openCount > 0 && <span className="vg-chip t-open">{openCount} open</span>}
-                {plannedCount > 0 && <span className="vg-chip t-hold">{plannedCount} planned</span>}
-                {openCount === 0 && plannedCount === 0 && (
+                {open > 0 && <span className="vg-chip t-open">{open} open</span>}
+                {planned > 0 && <span className="vg-chip t-hold">{planned} planned</span>}
+                {open === 0 && planned === 0 && (
                   <span className="vg-chip t-done">No open work</span>
                 )}
-                {asset.spaceName && <span className="vg-chip t-plain">{asset.spaceName}</span>}
               </div>
+
+              <dl className="vg-meta">
+                <dt>Asset</dt>
+                <dd>
+                  {asset.name} · #{asset.id}
+                </dd>
+                {asset.category && (
+                  <>
+                    <dt>Category</dt>
+                    <dd>{asset.category}</dd>
+                  </>
+                )}
+                {asset.spaceName && (
+                  <>
+                    <dt>Location</dt>
+                    <dd>{asset.spaceName}</dd>
+                  </>
+                )}
+              </dl>
 
               <button className="vg-row vg-row-primary" onClick={() => setView({ kind: 'wos' })}>
                 <Icon name="list" size={18} />
@@ -141,11 +196,7 @@ export default function ArWindow({
                   <Icon name="mic" size={18} />
                   Voice
                 </button>
-                <button className="vg-action" onClick={onNavigate}>
-                  <Icon name="compass" size={18} />
-                  Direction
-                </button>
-                <button className="vg-action" onClick={runBrief} disabled={brief.busy}>
+                <button className="vg-action vg-action-wide" onClick={runBrief} disabled={brief.busy}>
                   <Icon name="sparkle" size={18} />
                   {brief.busy ? 'Briefing…' : 'AI brief'}
                 </button>
@@ -276,16 +327,28 @@ function WoDetail({ wo, assetId }: { wo: WorkOrder; assetId: number }) {
       ))}
       {setTask.isError && <p className="vg-err">{(setTask.error as Error).message}</p>}
 
-      <h4 className="vg-section">Status</h4>
-      <DsSelect
-        label="Move to"
-        value=""
-        placeholder={wo.status ?? 'Select status'}
-        options={(statuses.data ?? [])
+      <h4 className="vg-section">Move to</h4>
+      {/* capsule transitions, not a dropdown: a select's floating list has no
+          good home inside a glass window (it shipped broken once), and the
+          catalogue is small — every state one tap away is the better AR UX */}
+      <div className="vg-status-row" role="group" aria-label="Move to">
+        {(statuses.data ?? [])
           .filter((s) => s.label !== wo.status)
-          .map((s) => ({ value: s.value, label: s.label }))}
-        onChange={(status) => changeStatus.mutate({ workOrderId: wo.id, status })}
-      />
+          .map((s) => (
+            <button
+              key={s.value}
+              className="vg-status-btn"
+              disabled={changeStatus.isPending}
+              onClick={() => changeStatus.mutate({ workOrderId: wo.id, status: s.value })}
+            >
+              <span className={`vg-dot t-${statusTone(s.label)}`} />
+              {s.label}
+            </button>
+          ))}
+        {statuses.data && statuses.data.length === 0 && (
+          <p className="vg-dim">No transitions available.</p>
+        )}
+      </div>
       {changeStatus.isPending && <p className="vg-dim">Updating status…</p>}
       {changeStatus.isError && <p className="vg-err">{(changeStatus.error as Error).message}</p>}
     </div>

@@ -127,9 +127,10 @@ describe('AR maintenance loop (mock mode)', () => {
       ).toBeInTheDocument(),
     );
 
-    // move the work order status through the catalogue
-    await user.click(within(panel).getByRole('combobox', { name: 'Move to' }));
-    await user.click(await within(panel).findByRole('option', { name: 'Closed' }));
+    // move the work order status through the catalogue — capsule transitions,
+    // one tap per state (the dropdown shipped broken inside the glass window)
+    const group = await within(panel).findByRole('group', { name: 'Move to' });
+    await user.click(within(group).getByRole('button', { name: /Closed/ }));
     await waitFor(() => expect(panel.querySelector('.vg-chip')).toHaveTextContent('Closed'));
 
     // pin a note at this standpoint for whoever comes next: "Pin here" freezes

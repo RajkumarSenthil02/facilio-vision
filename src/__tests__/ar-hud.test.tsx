@@ -279,3 +279,31 @@ describe('Place asset — the sheet that shipped broken', () => {
     );
   });
 });
+
+describe('Effi — the AR voice agent (design: Vision AR Voice Agent)', () => {
+  it('the orb floats on the stage; tapping opens the panel; a command replies in place', async () => {
+    seed();
+    const user = userEvent.setup();
+    bootAt('?mock=1&tab=ar');
+    await screen.findByRole('button', { name: 'AR on' });
+
+    // idle: the orb with its hint, floating clear of the marker field
+    const orb = await screen.findByRole('button', { name: 'Talk to Effi' });
+    expect(orb).toHaveClass('ef-orb');
+    expect(screen.getByText('Tap to talk')).toBeInTheDocument();
+
+    // tap → the panel rises (jsdom has no speech engine → typed fallback)
+    await user.click(orb);
+    const panel = await screen.findByRole('region', { name: 'Effi voice agent' });
+    expect(within(panel).getByText('Listening')).toBeInTheDocument();
+
+    // a local intent answers in the panel, not a toast of prose elsewhere
+    await user.type(within(panel).getByLabelText('Voice command'), 'rescan');
+    await user.click(within(panel).getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(within(panel).getByText('Rescanning.')).toBeInTheDocument());
+
+    // ✕ returns to the orb
+    await user.click(within(panel).getByRole('button', { name: 'Close Effi' }));
+    expect(await screen.findByRole('button', { name: 'Talk to Effi' })).toBeInTheDocument();
+  });
+});

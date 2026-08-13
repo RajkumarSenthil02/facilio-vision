@@ -25,7 +25,7 @@ import { appStore } from '../api/appStore';
 import { draftWorkOrder } from '../api/agents';
 import { useAsset, useAssetSearch } from '../api/hooks';
 import { useLocationScope } from '../state/LocationContext';
-import type { Asset, SiteGeo, Survey, SurveyMarker, WorkOrder } from '../api/types';
+import type { Asset, Survey, SurveyMarker, WorkOrder } from '../api/types';
 import { ArCard, ArGuide, ArSpace, setArPoseDelay, setArVideoSource } from '../ar/ArSpace';
 import { AssetTag, MinimizedDot, NoteTag, StandpointMarker } from '../ar/markers';
 import ArWindow from '../ar/ArWindow';
@@ -46,13 +46,12 @@ import Sheet from '../components/Sheet';
 import Icon from '../components/Icon';
 import AssetSelect from '../components/AssetSelect';
 import LocationPicker from '../components/LocationPicker';
-import VoiceSheet from './VoiceSheet';
+import EffiOverlay from '../voice/EffiOverlay';
 import { useScanLoop } from '../vision/scanLoop';
 import { describeEntry, resolveCode } from '../vision/codes';
 import { stampStopByCode } from '../rounds/roundsStore';
 import { useGeoFix } from '../hooks/useGeoFix';
 import { arOrientation, enableArOrientation, holdYawOffset, placementOrientation, poseSpeedDegS, useHeading } from '../hooks/useHeading';
-import { indoorLegs, mapsDirectionsUrl, type WayLeg } from '../wayfinding/legs';
 import '../styles/ar.css';
 import '../ar/arspace.css';
 
@@ -109,7 +108,6 @@ type SheetId =
   | 'pin'        // module picker: what am I pinning here?
   | 'pin-form'   // the chosen module's form
   | 'fault'
-  | 'legs'
   | 'site'
   | 'stand'
   | 'voice'
@@ -211,7 +209,6 @@ export default function ARScreen() {
   const [pinKind, setPinKind] = useState<PinKind>('note');
   const [pinBusy, setPinBusy] = useState(false);
   const [canPlaceAsset, setCanPlaceAsset] = useState(false);
-  const [legs, setLegs] = useState<WayLeg[]>([]);
   const [fault, setFault] = useState<FaultDraft>({
     subject: '',
     description: '',
@@ -598,37 +595,6 @@ export default function ARScreen() {
     startGuide(markerAbsBearing(activeSurvey, marker, presence.delta), marker.label);
   };
 
-  /** Direction for an asset: in-view guide when localized, legs/maps otherwise. */
-  const directionTo = (asset: Asset) => {
-    const host = surveys.find((s) => s.markers.some((m) => m.assetId === asset.id));
-    if (host) {
-      const marker = host.markers.find((m) => m.assetId === asset.id) as SurveyMarker;
-      if (presence && presence.surveyId === host.id) {
-        startGuide(markerAbsBearing(host, marker, presence.delta), asset.name);
-        return;
-      }
-      const planned = indoorLegs(surveys, getFix(), host.id);
-      setLegs(planned);
-      if (planned.length > 0) setSheet('legs');
-      setHint(
-        `${asset.name} is mapped at ${host.name} — scan that standpoint's code to be guided in view`,
-      );
-      return;
-    }
-    void (async () => {
-      const siteId = scope.siteId;
-      const geo = siteId
-        ? await appStore.kvGet<SiteGeo>('settings', `sitegeo.${siteId}`)
-        : null;
-      if (!geo) {
-        setHint('No survey marker and no site coordinates for this asset');
-        return;
-      }
-      // Deep link only — the google-maps connection is deliberately not called.
-      window.open(mapsDirectionsUrl(geo.lat, geo.lng), '_blank', 'noopener');
-    })();
-  };
-
   /**
    * "Pin here" — freeze the aim NOW, then ask what it is.
    *
@@ -694,8 +660,14 @@ export default function ARScreen() {
         const id = await provider.createWorkOrder({
           subject: text.slice(0, 80),
           description: text,
-          siteId: scope.siteId,
+          siteId: activeSurvey.siteId ?? scope.siteId,
           resourceId: focusAssetId ?? undefined,
+          spaceId:
+            focusAsset.data?.spaceId ??
+            activeSurvey.floorId ??
+            activeSurvey.buildingId ??
+            scope.floorId ??
+            scope.buildingId,
         });
         await addMarkerToSurvey({
           ...base,
@@ -761,8 +733,14 @@ export default function ARScreen() {
       await provider.createWorkOrder({
         subject,
         description: fault.description.trim() || undefined,
-        siteId: scope.siteId,
+        siteId: activeSurvey?.siteId ?? scope.siteId,
         resourceId: focusAssetId ?? undefined,
+        spaceId:
+          focusAsset.data?.spaceId ??
+          activeSurvey?.floorId ??
+          activeSurvey?.buildingId ??
+          scope.floorId ??
+          scope.buildingId,
       });
       await queryClient.invalidateQueries({ queryKey: ['workorders'] });
       setSheet(null);
@@ -927,7 +905,6 @@ export default function ARScreen() {
                       }}
                       onVoice={() => setSheet('voice')}
                       onFault={openFault}
-                      onNavigate={() => focusAsset.data && directionTo(focusAsset.data)}
                     />
                   ) : marker.assetId ? (
                     <AssetTag
@@ -1288,36 +1265,26 @@ Aim captured — lower the phone to type, the pin stays where you pointed.
         </label>
       </ArSheet>
 
-      <ArSheet label="Route" open={sheet === 'legs'} title="Route" onClose={() => setSheet(null)}>
-        <ol className="leg-list">
-          {legs.map((leg) => (
-            <li key={leg.toSurveyId}>{leg.text}</li>
-          ))}
-        </ol>
-        <p className="leg-note">
-          The last metres are not a leg — scan the standpoint code there and the arrow takes over.
-        </p>
-      </ArSheet>
-
-      <ArSheet
-        label="Voice"
-        open={sheet === 'voice'}
-        title="Voice"
-        onClose={() => setSheet(null)}
-        size="tall"
-      >
-        <VoiceSheet
+      {/* Effi — the voice agent lives ON the stage (orb → panel), per the
+          Vision AR Voice Agent design. The rail mic and the window's Voice
+          action both open the same panel. */}
+      {arOn && (
+        <EffiOverlay
+          open={sheet === 'voice'}
+          onOpenChange={(next) => setSheet(next ? 'voice' : null)}
           assetInView={
             focusAsset.data ? { id: focusAsset.data.id, name: focusAsset.data.name } : undefined
           }
           captureFrame={() => camera.snap()}
+          woUrl={(id) => fillLink(links.wo, id)}
           onUiAction={(verb) => {
             if (verb === 'minimize') setBoardMinimized(true);
             if (verb === 'expand') setBoardMinimized(false);
             if (verb === 'clear') setGuide(null);
+            if (verb === 'tasks') setSheet(null);
           }}
         />
-      </ArSheet>
+      )}
 
       {/* in-view work orders for the focused asset */}
       {/* An asset focused OUTSIDE the marker set (vision lane lock, QR on an
@@ -1335,7 +1302,6 @@ Aim captured — lower the phone to type, the pin stays where you pointed.
               onMinimize={() => setFocusAssetId(null)}
               onVoice={() => setSheet('voice')}
               onFault={openFault}
-              onNavigate={() => focusAsset.data && directionTo(focusAsset.data)}
             />
           </div>
         )}

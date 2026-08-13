@@ -84,6 +84,9 @@ export interface WorkOrderDraft {
   /** Plain numeric ids — the script lane takes them as-is. */
   siteId?: number;
   resourceId?: number;
+  /** BaseSpace the work physically belongs to (asset's space, or the survey's
+   * floor/building) — this is what puts site/building/space on the record. */
+  spaceId?: number;
 }
 
 /** Where the user is working. Narrower fields win (floor > building > site). */

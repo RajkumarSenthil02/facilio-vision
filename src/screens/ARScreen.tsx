@@ -27,7 +27,9 @@ import { useAsset, useAssetSearch } from '../api/hooks';
 import { useLocationScope } from '../state/LocationContext';
 import type { Asset, SiteGeo, Survey, SurveyMarker, WorkOrder } from '../api/types';
 import { ArCard, ArGuide, ArSpace, setArPoseDelay, setArVideoSource } from '../ar/ArSpace';
-import { AssetTag, NoteTag, StandpointMarker } from '../ar/markers';
+import { AssetTag, MinimizedDot, NoteTag, StandpointMarker } from '../ar/markers';
+import ArWindow from '../ar/ArWindow';
+import { fillLink, loadLinks, normaliseLinks } from '../api/links';
 import type { MarkerStatus } from '../ar/markers';
 import { DEFAULT_MARKER_RANGE_M, markerAbsBearing, parallaxCorrected, presenceDecayCheck, refreshedPresence, type Presence } from '../ar/presence';
 import { columnProfile } from '../ar/imageShift';
@@ -48,7 +50,6 @@ import VoiceSheet from './VoiceSheet';
 import { useScanLoop } from '../vision/scanLoop';
 import { describeEntry, resolveCode } from '../vision/codes';
 import { stampStopByCode } from '../rounds/roundsStore';
-import WorkOrderPanel from '../components/WorkOrderPanel';
 import { useGeoFix } from '../hooks/useGeoFix';
 import { arOrientation, enableArOrientation, holdYawOffset, placementOrientation, poseSpeedDegS, useHeading } from '../hooks/useHeading';
 import { indoorLegs, mapsDirectionsUrl, type WayLeg } from '../wayfinding/legs';
@@ -198,6 +199,8 @@ export default function ARScreen() {
   const [arOn, setArOn] = useState(true);
   const [presence, setPresence] = useState<Presence | null>(null);
   const [focusAssetId, setFocusAssetId] = useState<number | null>(null);
+  /** Markers the user minimized to a DOT — the visionOS "put it away" state. */
+  const [dotted, setDotted] = useState<Set<string>>(() => new Set());
   const [guide, setGuide] = useState<{ heading: number; name: string } | null>(null);
   const [sheet, setSheet] = useState<SheetId>(null);
   const [codeSheet, setCodeSheet] = useState<string | null>(null);
@@ -304,6 +307,8 @@ export default function ARScreen() {
     [assets.data],
   );
   const focusAsset = useAsset(focusAssetId);
+  const linksQuery = useQuery({ queryKey: ['org-links'], queryFn: loadLinks });
+  const links = linksQuery.data ?? normaliseLinks(null);
 
   // ---- board minimize/restore, persisted per site ----
 
@@ -883,6 +888,9 @@ export default function ARScreen() {
               const summary = summarize(
                 marker.assetId ? (byAsset.get(marker.assetId) ?? []) : [],
               );
+              const isDotted = dotted.has(marker.id);
+              const isWindow =
+                !isDotted && marker.assetId != null && focusAssetId === marker.assetId;
               return (
                 <ArCard
                   key={marker.id}
@@ -891,7 +899,37 @@ export default function ARScreen() {
                   edgeLabel={marker.label}
                   onEdgeClick={() => startGuide(shown.bearing, marker.label)}
                 >
-                  {marker.assetId ? (
+                  {isDotted ? (
+                    // minimized: a status dot + label, tap to restore
+                    <MinimizedDot
+                      label={marker.label}
+                      status={summary.status}
+                      onClick={() => {
+                        setDotted((prev) => {
+                          const next = new Set(prev);
+                          next.delete(marker.id);
+                          return next;
+                        });
+                        if (marker.assetId != null) setFocusAssetId(marker.assetId);
+                      }}
+                    />
+                  ) : isWindow && focusAsset.data ? (
+                    // the full work surface, anchored where the asset is
+                    <ArWindow
+                      asset={focusAsset.data}
+                      openCount={summary.open}
+                      plannedCount={summary.planned}
+                      woUrl={(id) => fillLink(links.wo, id)}
+                      assetUrl={(id) => fillLink(links.asset, id)}
+                      onMinimize={() => {
+                        setDotted((prev) => new Set(prev).add(marker.id));
+                        setFocusAssetId(null);
+                      }}
+                      onVoice={() => setSheet('voice')}
+                      onFault={openFault}
+                      onNavigate={() => focusAsset.data && directionTo(focusAsset.data)}
+                    />
+                  ) : marker.assetId ? (
                     <AssetTag
                       name={marker.label}
                       sub={activeSurvey.spaceName}
@@ -1282,27 +1320,25 @@ Aim captured — lower the phone to type, the pin stays where you pointed.
       </ArSheet>
 
       {/* in-view work orders for the focused asset */}
-      {focusAsset.data && (
-        <aside className="ar-side-panel">
-          <div className="ar-side-panel-hd">
-            <h3>{focusAsset.data.name}</h3>
-            <button className="ar-sheet-x" aria-label="Close asset panel" onClick={() => setFocusAssetId(null)}>
-              ✕
-            </button>
+      {/* An asset focused OUTSIDE the marker set (vision lane lock, QR on an
+          unpinned asset) still gets the full window — screen-anchored at the
+          bottom, since there is no marker direction to hang it on. */}
+      {focusAsset.data &&
+        !markers.some((m) => m.assetId === focusAssetId && !dotted.has(m.id)) && (
+          <div className="ar-window-dock">
+            <ArWindow
+              asset={focusAsset.data}
+              openCount={byAsset.get(focusAsset.data.id)?.length ?? 0}
+              plannedCount={0}
+              woUrl={(id) => fillLink(links.wo, id)}
+              assetUrl={(id) => fillLink(links.asset, id)}
+              onMinimize={() => setFocusAssetId(null)}
+              onVoice={() => setSheet('voice')}
+              onFault={openFault}
+              onNavigate={() => focusAsset.data && directionTo(focusAsset.data)}
+            />
           </div>
-          <div className="ar-side-panel-bd scroll-y">
-            <div className="row-actions">
-              <button className="btn-quiet grow" onClick={() => directionTo(focusAsset.data as Asset)}>
-                Direction
-              </button>
-              <button className="btn-quiet grow" onClick={openFault}>
-                Raise a fault
-              </button>
-            </div>
-            <WorkOrderPanel asset={focusAsset.data} />
-          </div>
-        </aside>
-      )}
+        )}
 
       {codeSheet && (
         <CodeSheet

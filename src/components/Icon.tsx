@@ -36,7 +36,9 @@ export type IconName =
   | 'route'
   | 'settings'
   | 'home'
-  | 'alert';
+  | 'alert'
+  | 'external'
+  | 'chevron-right';
 
 const PATHS: Record<IconName, JSX.Element> = {
   compass: (
@@ -95,6 +97,14 @@ const PATHS: Record<IconName, JSX.Element> = {
   close: <path d="M6 6l12 12M18 6L6 18" />,
   plus: <path d="M12 5v14M5 12h14" />,
   check: <path d="M4 12.5l5 5L20 6.5" />,
+  external: (
+    <>
+      <path d="M14 4h6v6" />
+      <path d="M20 4l-9 9" />
+      <path d="M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5" />
+    </>
+  ),
+  'chevron-right': <path d="M9 5l7 7-7 7" />,
   search: (
     <>
       <circle cx="11" cy="11" r="7" />

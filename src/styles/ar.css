@@ -368,7 +368,8 @@
 
 .ar-standpoint-marker .lbl { font-size: 13px; font-weight: 500; }
 
-/* Minimized dot: 14px, status colour, slow pulse ring */
+/* Minimized dot: 14px status colour in a 28px glass halo, slow pulse ring —
+   visionOS Tier 0 (non-blurred fill: blur budget belongs to the windows). */
 .ar-min-dot {
   position: absolute;
   display: flex;
@@ -386,6 +387,17 @@
   width: 14px;
   height: 14px;
   border-radius: var(--radius-pill);
+  outline: 7px solid rgba(30, 30, 34, 0.45);
+  outline-offset: 0;
+}
+.ar-min-dot .lbl {
+  color: rgba(255, 255, 255, 0.92);
+  font: 600 12px/1.2 var(--font-sans);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ar-min-dot .dot.st-green { box-shadow: 0 0 0 3px rgba(41, 160, 30, 0.28); }

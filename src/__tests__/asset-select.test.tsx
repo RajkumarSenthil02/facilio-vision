@@ -75,3 +75,34 @@ describe('AssetSelect', () => {
     expect(screen.getByRole('combobox', { name: 'Asset' })).toHaveTextContent(picked[0].name);
   });
 });
+
+describe('deep links (fillLink)', () => {
+  it('fills {id}, requires http(s), hides when unset', async () => {
+    const { fillLink } = await import('../api/links');
+    expect(fillLink('https://acme.facilio.com/maintenance/workorder/{id}/summary', 42)).toBe(
+      'https://acme.facilio.com/maintenance/workorder/42/summary',
+    );
+    expect(fillLink('', 42)).toBeNull();
+    expect(fillLink('no-placeholder', 42)).toBeNull();
+    expect(fillLink('javascript:alert(1)//{id}', 42)).toBeNull();
+  });
+});
+
+describe('AI brief fallback', () => {
+  it('the deterministic brief names the count and the oldest open work order', async () => {
+    const { localBrief } = await import('../api/agents');
+    const text = localBrief({ name: 'AHU-03' }, [
+      { id: 9, subject: 'Replace filter', status: 'Open' },
+      { id: 4, subject: 'Belt inspection', status: 'Open' },
+      { id: 2, subject: 'Old fix', status: 'Closed' },
+    ]);
+    expect(text).toContain('AHU-03');
+    expect(text).toContain('2 open');
+    expect(text).toContain('#4');
+  });
+
+  it('a clear asset is said to be clear', async () => {
+    const { localBrief } = await import('../api/agents');
+    expect(localBrief({ name: 'AHU-03' }, [])).toMatch(/clear/i);
+  });
+});

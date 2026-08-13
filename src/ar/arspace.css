@@ -429,3 +429,12 @@ button.ar-pill { cursor: pointer; }
 .ar-pin-kind-label { font-size: 15px; font-weight: 600; }
 .ar-pin-kind-hint { font-size: 12.5px; color: var(--ink-500); }
 
+
+/* Screen-docked ArWindow (asset focused with no marker to anchor to). */
+.ar-window-dock {
+  position: absolute;
+  left: 50%;
+  bottom: 108px;
+  transform: translateX(-50%);
+  z-index: 12;
+}

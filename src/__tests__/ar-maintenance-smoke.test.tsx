@@ -102,11 +102,13 @@ describe('AR maintenance loop (mock mode)', () => {
     await waitFor(() => expect(within(marker).getByText('1 open')).toBeInTheDocument());
     expect(marker.querySelector('.edge')).toHaveClass('st-red');
 
-    // focusing it opens the in-view work order panel
+    // focusing it opens the AR WINDOW anchored at the marker (visionOS style):
+    // home view → the Work orders group → one work order's summary
     await user.click(marker);
     const panel = await screen.findByRole('complementary');
     expect(within(panel).getByRole('heading', { name: 'AHU-03' })).toBeInTheDocument();
 
+    await user.click(within(panel).getByRole('button', { name: /Work orders/ }));
     const woRow = await within(panel).findByRole('button', {
       name: /AHU-03 vibration above threshold/,
     });
@@ -128,7 +130,7 @@ describe('AR maintenance loop (mock mode)', () => {
     // move the work order status through the catalogue
     await user.click(within(panel).getByRole('combobox', { name: 'Move to' }));
     await user.click(await within(panel).findByRole('option', { name: 'Closed' }));
-    await waitFor(() => expect(panel.querySelector('.badge')).toHaveTextContent('Closed'));
+    await waitFor(() => expect(panel.querySelector('.vg-chip')).toHaveTextContent('Closed'));
 
     // pin a note at this standpoint for whoever comes next: "Pin here" freezes
     // the aim, THEN asks which module this is
@@ -168,4 +170,22 @@ describe('AR maintenance loop (mock mode)', () => {
     await user.click(rows[0]);
     expect(await screen.findByText('AHU-03', { selector: '.vs-guide-name' })).toBeInTheDocument();
   });
+});
+
+it('minimize sends the window to a DOT; tapping the dot brings it back', async () => {
+  seed();
+  const user = await standAtStandpoint();
+  const marker = await screen.findByRole('button', { name: /AHU-03/ });
+  await user.click(marker);
+
+  const panel = await screen.findByRole('complementary');
+  await user.click(within(panel).getByRole('button', { name: 'Minimize AHU-03' }));
+
+  // the window is gone; in its place the visionOS dot with the label
+  expect(screen.queryByRole('complementary')).toBeNull();
+  const dot = await screen.findByRole('button', { name: 'Restore AHU-03' });
+  expect(dot).toHaveClass('ar-min-dot');
+
+  await user.click(dot);
+  expect(await screen.findByRole('complementary')).toBeInTheDocument();
 });

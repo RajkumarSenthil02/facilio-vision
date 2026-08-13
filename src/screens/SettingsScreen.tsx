@@ -9,6 +9,7 @@ import {
   savePlaceAssetPolicy,
   type PlaceAssetPolicy,
 } from '../api/permissions';
+import { EMPTY_LINKS, loadLinks, saveLinks, type LinkTemplates } from '../api/links';
 import { useSites } from '../api/hooks';
 import { detectEmbed } from '../shell/embed';
 import {
@@ -371,6 +372,56 @@ function PlaceAssetPolicyCard() {
   );
 }
 
+function DeepLinksCard() {
+  const [links, setLinks] = useState<LinkTemplates>(EMPTY_LINKS);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    void loadLinks().then(setLinks);
+  }, []);
+
+  const save = async (next: LinkTemplates) => {
+    setLinks(next);
+    await saveLinks(next);
+    setStatus('Saved');
+    setTimeout(() => setStatus(null), 1500);
+  };
+
+  return (
+    <div className="kit-card">
+      <div className="kit-card-hd">
+        <h3>Open-in-Facilio links</h3>
+        {status && <span className="muted small">{status}</span>}
+      </div>
+      <div className="kit-card-bd">
+        <p className="muted small" style={{ marginTop: 0 }}>
+          The AR windows show an “Open in Facilio” shortcut when these templates are set. Use
+          your org’s web app URL with <code>{'{id}'}</code> where the record id goes. Left
+          empty, the shortcut stays hidden.
+        </p>
+        <label className="field">
+          <span>Work order summary URL</span>
+          <input
+            value={links.wo}
+            onChange={(e) => setLinks({ ...links, wo: e.target.value })}
+            onBlur={() => void save(links)}
+            placeholder="https://yourorg.facilio.com/maintenance/workorder/{id}/summary"
+          />
+        </label>
+        <label className="field" style={{ marginTop: 10 }}>
+          <span>Asset summary URL</span>
+          <input
+            value={links.asset}
+            onChange={(e) => setLinks({ ...links, asset: e.target.value })}
+            onBlur={() => void save(links)}
+            placeholder="https://yourorg.facilio.com/assets/asset/{id}/summary"
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
+
 function DangerZoneCard() {
   const [done, setDone] = useState<string | null>(null);
 
@@ -414,6 +465,7 @@ export default function SettingsScreen() {
       <RecognitionIndexCard />
       <AgentsCard />
       <PlaceAssetPolicyCard />
+      <DeepLinksCard />
       <DangerZoneCard />
     </section>
   );

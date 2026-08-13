@@ -370,6 +370,55 @@ export async function readNameplate(
 }
 
 /**
+ * Field briefing: two sentences on the asset's state + ONE recommended next
+ * action, spoken by the voice agent from the live work-order list. If the
+ * model answers with a tool call (its other dialect) or dies, the caller gets
+ * the DETERMINISTIC brief instead — a technician mid-job never sees an error
+ * where a summary should be.
+ */
+export function localBrief(asset: { name: string }, wos: WorkOrderLite[]): string {
+  const open = wos.filter((w) => !/closed|resolved/i.test(w.status ?? ''));
+  if (open.length === 0) return `${asset.name} is clear — no open work orders.`;
+  const oldest = open[open.length - 1];
+  return `${asset.name} has ${open.length} open work order${open.length === 1 ? '' : 's'}. Start with #${oldest.id} — ${oldest.subject}.`;
+}
+
+export interface WorkOrderLite {
+  id: number;
+  subject: string;
+  status?: string;
+}
+
+export async function briefAsset(
+  asset: { id: number; name: string },
+  wos: WorkOrderLite[],
+  opts: AgentRunOptions = {},
+): Promise<string> {
+  const fallback = localBrief(asset, wos);
+  if (isMockMode()) return fallback;
+  const listing = wos
+    .slice(0, 15)
+    .map((w) => `#${w.id} "${w.subject}" [${w.status ?? 'unknown'}]`)
+    .join('; ');
+  try {
+    const reply = await withDeadline(
+      () =>
+        callAgent(
+          VOICE_AGENT,
+          `Answer in plain text only (no JSON, no tool call). In at most two short sentences, brief a field technician on the state of asset "${asset.name}", then name the single most urgent next action. Its work orders: ${listing || 'none'}.`,
+        ),
+      VOICE_AGENT,
+      opts,
+    );
+    // the voice agent's other dialect is a JSON tool call — that is not a brief
+    if (/^\s*[{[]/.test(reply)) return fallback;
+    return reply.trim() || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
  * Raw voice turn — the client-side tool loop in src/voice interprets the reply.
  * Deliberately NOT structured: the protocol is "a JSON tool call OR a plain
  * spoken sentence", which no output schema can express, so fv-voice carries no

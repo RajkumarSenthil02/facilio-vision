@@ -1,13 +1,16 @@
 // agents-smoke (WS-C): the four platform surprises the agent seam encodes, and
 // the fabrication guard that keeps an invented id out of a write.
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const executeAgent = vi.fn();
 vi.mock('../api/vibe', () => ({ vibe: { executeAgent: (...args: unknown[]) => executeAgent(...args) } }));
 
-import { contentOf, identifyAsset, orNone, stripFences } from '../api/agents';
+import { clearAgentCache, contentOf, identifyAsset, orNone, stripFences } from '../api/agents';
 import { runToolLoop } from '../voice/toolLoop';
 import { fakeDeps } from './wsC-fakes';
+
+// identifyAsset caches on (fileIds, candidate ids); these cases reuse both.
+beforeEach(() => clearAgentCache());
 
 describe('agent contract helpers', () => {
   it('contentOf throws when the reply has no text content', () => {

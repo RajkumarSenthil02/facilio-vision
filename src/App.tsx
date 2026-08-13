@@ -1,14 +1,9 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
-import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import AuthGate from './auth/AuthGate';
 import { detectEmbed } from './shell/embed';
 import { installGlobalErrorHandlers, onGlobalError } from './shell/globalErrors';
-import {
-  createAppQueryClient,
-  createPersistOptions,
-  reconcileCacheIdentity,
-} from './api/queryClient';
+import { createAppQueryClient, purgeLegacyPersistedCache } from './api/queryClient';
 import { onQueueChange, flushQueue } from './api/offlineQueue';
 import { onAppStoreStatus } from './api/appStore';
 import { isMockMode } from './api/provider';
@@ -57,43 +52,6 @@ const SCREENS: ShellScreen[] = [
   { id: 'boom', label: 'Boom', visible: false, component: BoomScreen },
 ];
 
-/**
- * Drops the persisted cache the moment the signed-in identity differs from the
- * one it was written under, then forces a live refetch. Without this, another
- * org's records rehydrate from localStorage and paint as if they were yours.
- */
-function CacheIdentityGuard({
-  orgId,
-  userId,
-  children,
-}: {
-  orgId: number;
-  userId: number;
-  children: ReactNode;
-}) {
-  const queryClient = useQueryClient();
-  const [switched, setSwitched] = useState(false);
-
-  useEffect(() => {
-    if (reconcileCacheIdentity(orgId, userId)) {
-      queryClient.clear();
-      void queryClient.refetchQueries();
-      setSwitched(true);
-    }
-  }, [orgId, userId, queryClient]);
-
-  return (
-    <>
-      {switched && (
-        <div className="notice-banner" role="status">
-          <span>Signed in to a different organisation — showing its live data.</span>
-        </div>
-      )}
-      {children}
-    </>
-  );
-}
-
 export default function App() {
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [pendingWrites, setPendingWrites] = useState(0);
@@ -101,14 +59,15 @@ export default function App() {
   const embed = detectEmbed();
 
   const queryClient = useMemo(createAppQueryClient, []);
-  const persistOptions = useMemo(() => createPersistOptions(), []);
+  // Clear anything a build with persistence left on disk.
+  useMemo(purgeLegacyPersistedCache, []);
 
   useEffect(() => onGlobalError(setGlobalError), []);
   useEffect(() => onQueueChange(setPendingWrites), []);
   useEffect(() => onAppStoreStatus(setStoreDown), []);
 
   return (
-    <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
+    <QueryClientProvider client={queryClient}>
       <div className={embed.embedded ? 'app embedded' : 'app'}>
         {globalError && (
           <div className="global-error-banner" role="alert">
@@ -150,16 +109,14 @@ export default function App() {
           </div>
         )}
         <AuthGate embedded={embed.embedded}>
-          {(me) => (
-            <CacheIdentityGuard orgId={me.org.orgId} userId={me.user.uid}>
-              <LocationProvider>
-                <ActiveRoundChip />
-                <AppShell screens={SCREENS} />
-              </LocationProvider>
-            </CacheIdentityGuard>
+          {() => (
+            <LocationProvider>
+              <ActiveRoundChip />
+              <AppShell screens={SCREENS} />
+            </LocationProvider>
           )}
         </AuthGate>
       </div>
-    </PersistQueryClientProvider>
+    </QueryClientProvider>
   );
 }

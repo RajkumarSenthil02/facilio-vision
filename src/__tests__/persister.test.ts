@@ -1,10 +1,16 @@
-// 2.8 acceptance: the persister structurally refuses non-JSON-safe data.
-// A Map in the query cache rehydrates as {} and throws on the next .get() —
-// a blank screen that only appears on the second load. These tests make that
-// class of bug impossible to reintroduce quietly.
+// Query results are NOT persisted to disk.
+//
+// They were, and it produced a real correctness bug: a single localStorage
+// slot with a 24h life and no org scoping, so a session that had read org A's
+// sites rehydrated them while signed into org B — the stale copy painting
+// before (or instead of) the live refetch. Records are per-org and per-user;
+// a disk cache that does not model that is worse than no cache.
+//
+// isJsonSafe is kept because it is the guard any future persistence must use
+// (a Map survives JSON.stringify as {} and rehydrates broken on the SECOND
+// load — the failure that is invisible in a first-run test).
 import { describe, expect, it } from 'vitest';
-import { dehydrate } from '@tanstack/react-query';
-import { createAppQueryClient, createPersistOptions, isJsonSafe } from '../api/queryClient';
+import { createAppQueryClient, isJsonSafe, purgeLegacyPersistedCache } from '../api/queryClient';
 
 describe('isJsonSafe', () => {
   it('accepts plain JSON data', () => {
@@ -35,17 +41,24 @@ describe('isJsonSafe', () => {
   });
 });
 
-describe('persister filter', () => {
-  it('dehydrates JSON-safe queries and refuses Map-bearing ones', async () => {
+describe('no disk persistence', () => {
+  it('keeps query data in memory only — nothing is written to localStorage', () => {
     const client = createAppQueryClient();
-    client.setQueryData(['safe'], { rows: [1, 2, 3] });
-    client.setQueryData(['unsafe'], { index: new Map([['a', 1]]) });
+    client.setQueryData(['sites'], [{ id: 1, name: 'Site A' }]);
 
-    const options = createPersistOptions(window.localStorage);
-    const dehydrated = dehydrate(client, options.dehydrateOptions);
+    const written = Object.keys(localStorage).filter((k) => k.startsWith('fv.queryCache'));
+    expect(written).toEqual([]);
+    // still cached for this session
+    expect(client.getQueryData(['sites'])).toEqual([{ id: 1, name: 'Site A' }]);
+  });
 
-    const keys = dehydrated.queries.map((q) => q.queryKey[0]);
-    expect(keys).toContain('safe');
-    expect(keys).not.toContain('unsafe');
+  it('purges anything an earlier persisting build left behind', () => {
+    localStorage.setItem('fv.queryCache', '{"stale":"org-a-sites"}');
+    localStorage.setItem('fv.cacheIdentity', '2838:1');
+
+    purgeLegacyPersistedCache();
+
+    expect(localStorage.getItem('fv.queryCache')).toBeNull();
+    expect(localStorage.getItem('fv.cacheIdentity')).toBeNull();
   });
 });

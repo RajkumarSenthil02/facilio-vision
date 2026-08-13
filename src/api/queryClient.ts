@@ -1,6 +1,4 @@
 import { QueryClient } from '@tanstack/react-query';
-import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
-import type { PersistQueryClientOptions } from '@tanstack/react-query-persist-client';
 
 /**
  * Structural JSON-safety check for the persister. A `Map` in the query cache
@@ -42,11 +40,11 @@ export function createAppQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        // The persisted cache paints instantly; ALWAYS revalidate against the
-        // org on mount so nobody acts on yesterday's work order status.
+        // Memory-only cache. Nothing survives a reload, so a record can never
+        // outlive the org it belongs to.
         refetchOnMount: 'always',
         staleTime: 30_000,
-        gcTime: 24 * 60 * 60 * 1000, // must outlive the persister's maxAge
+        gcTime: 5 * 60 * 1000,
         retry: 1,
       },
     },
@@ -57,50 +55,25 @@ const STORAGE_KEY = 'fv.queryCache';
 const IDENTITY_KEY = 'fv.cacheIdentity';
 
 /**
- * The persisted cache is keyed by ONE storage slot and survives 24h — so a
- * session that once read org A's sites will happily rehydrate them while
- * signed into org B, and `refetchOnMount` only replaces them *after* the stale
- * paint (or never, if the refetch is slow or failing). That is how another
- * org's records end up on screen.
+ * Query results are NOT persisted.
  *
- * Records are per-org, so the cache must be too: whenever the signed-in
- * identity differs from the one the cache was written under, the cache is
- * dropped before anything can render from it.
+ * They were, and it caused a real correctness bug: one storage slot with a 24h
+ * life, no org scoping, so a session that had read org A's sites rehydrated
+ * them while signed into org B — and the stale copy paints before (or instead
+ * of) the live refetch. Records are per-org and per-user; a disk cache that
+ * does not model that is worse than no cache.
  *
- * Returns true when a purge happened.
+ * The in-memory cache still de-dupes within a session, which is where nearly
+ * all of the benefit was. If offline reads are wanted later, reintroduce
+ * persistence keyed by `${orgId}:${userId}` and drop it on identity change.
+ *
+ * This clears anything an earlier build left behind.
  */
-export function reconcileCacheIdentity(
-  orgId: number,
-  userId: number,
-  storage: Storage = window.localStorage,
-): boolean {
-  const identity = `${orgId}:${userId}`;
-  let previous: string | null = null;
-  try {
-    previous = storage.getItem(IDENTITY_KEY);
-  } catch {
-    return false; // storage blocked (third-party iframe) — nothing persisted anyway
-  }
-  if (previous === identity) return false;
-
+export function purgeLegacyPersistedCache(storage: Storage = window.localStorage): void {
   try {
     storage.removeItem(STORAGE_KEY);
-    storage.setItem(IDENTITY_KEY, identity);
+    storage.removeItem(IDENTITY_KEY);
   } catch {
-    /* best effort */
+    /* storage can be blocked in a third-party iframe — nothing to purge there */
   }
-  return previous !== null; // first run isn't a "switch", just a first write
-}
-
-export function createPersistOptions(
-  storage: Storage = window.localStorage,
-): Omit<PersistQueryClientOptions, 'queryClient'> {
-  return {
-    persister: createSyncStoragePersister({ storage, key: STORAGE_KEY }),
-    maxAge: 24 * 60 * 60 * 1000,
-    dehydrateOptions: {
-      shouldDehydrateQuery: (query) =>
-        query.state.status === 'success' && isJsonSafe(query.state.data),
-    },
-  };
 }

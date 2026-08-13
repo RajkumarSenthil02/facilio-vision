@@ -151,6 +151,27 @@ button:hover { border-color: var(--muted); }
   padding: 0 6px;
 }
 
+.offline-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px;
+  background: var(--warning-050);
+  color: var(--warning-700);
+  border-bottom: 1px solid var(--warning-500);
+  font-size: var(--fs-small);
+}
+
+.offline-banner button {
+  border: 1px solid var(--warning-700);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font-size: var(--fs-small);
+  padding: 3px 10px;
+}
+
 /* ---- cards / lists ---- */
 
 .card-list {

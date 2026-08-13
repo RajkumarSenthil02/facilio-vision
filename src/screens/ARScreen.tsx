@@ -32,6 +32,7 @@ import { CodeSheet } from '../components/camera/CodeSheets';
 import { useCamera } from '../components/camera/useCamera';
 import { useScanLoop } from '../vision/scanLoop';
 import { describeEntry, resolveCode } from '../vision/codes';
+import { stampStopByCode } from '../rounds/roundsStore';
 import WorkOrderPanel from '../components/WorkOrderPanel';
 import { useGeoFix } from '../hooks/useGeoFix';
 import { arOrientation, enableArOrientation } from '../hooks/useHeading';
@@ -202,6 +203,9 @@ export default function ARScreen() {
     const code = qrHit.code;
     const reloc = relocRef.current;
     const orient = arOrientation();
+
+    // A scanned sticker is proof of presence for an active round's stop (7.2).
+    void stampStopByCode(code).catch(() => undefined);
 
     const duplicates = Relocalizer.duplicatesFor(surveys, code);
     if (duplicates.length > 1) {

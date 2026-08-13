@@ -1,0 +1,12 @@
+{
+  "title": "fv_identify_verdict",
+  "type": "object",
+  "description": "Vision-confirm verdict. assetId must be one of the candidate ids from the prompt, or the string 'none'.",
+  "properties": {
+    "assetId": { "type": "string", "description": "The chosen candidate's numeric id as a string, or 'none' when no candidate matches." },
+    "confidence": { "type": "number", "description": "0 to 1. Restated bound: never outside 0..1." },
+    "reason": { "type": "string", "description": "One short sentence naming the visual evidence." }
+  },
+  "required": ["assetId", "confidence", "reason"],
+  "additionalProperties": false
+}

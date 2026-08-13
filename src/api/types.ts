@@ -120,6 +120,100 @@ export interface PageResult<T> {
   totalCount?: number;
 }
 
+// ---- app-store domain (surveys, codes, rounds — stored as KV JSON) ----
+
+/** A geolocation sample. Indoors this is often absent — callers treat null as normal. */
+export interface GeoFix {
+  lat: number;
+  lng: number;
+  /** Metres (from Geolocation API). */
+  accuracy: number;
+  /** Epoch ms when sampled. */
+  at: number;
+}
+
+/** One auto-captured frame of a 360° sweep. */
+export interface SweepFrame {
+  /** Absolute device heading at capture (deg 0-360). Frame 0's heading is the survey's reference. */
+  heading: number;
+  pitch: number;
+  /** int8+base64 quantised embedding {q, s, dim} (vision/quantize). */
+  vec: { q: string; s: number; dim: number };
+}
+
+/**
+ * A placed marker. heading/pitch are RELATIVE TO SWEEP FRAME 0 — absolute
+ * compass bearings are 5-30° wrong indoors and differently wrong per day;
+ * relative storage makes the error cancel. Render with:
+ *   abs = (sweep[0].heading + marker.heading + relocΔ + 360) % 360
+ */
+export interface SurveyMarker {
+  id: string;
+  label: string;
+  heading: number;
+  pitch: number;
+  assetId?: number;
+  workOrderId?: number;
+  note?: string;
+}
+
+export interface Survey {
+  id: string;
+  name: string;
+  siteId?: number;
+  buildingId?: number;
+  floorId?: number;
+  spaceName?: string;
+  geo: GeoFix | null;
+  /** Standpoint QR code value, when enrolled. */
+  qrCode?: string;
+  /** Device heading while FACING the QR at enrolment — scanning it later gives Δ instantly. */
+  qrHeading?: number;
+  standpointFileId?: number;
+  sweep: SweepFrame[];
+  markers: SurveyMarker[];
+  /** Embedder identity — vectors from another model never mix. */
+  modelId: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
+/** Typed QR registry entry (fv_codes). A code identifies exactly ONE thing. */
+export interface CodeEntry {
+  code: string;
+  type: 'asset' | 'space' | 'floor' | 'survey';
+  assetId?: number;
+  spaceId?: number;
+  floorId?: number;
+  surveyId?: string;
+  createdAt: string;
+}
+
+export interface RoundStop {
+  surveyId: string;
+  /** Proof of presence for a completed stop. */
+  via?: 'qr' | 'visual' | 'manual';
+  at?: string;
+  note?: string;
+}
+
+export interface Round {
+  id: string;
+  name: string;
+  siteId?: number;
+  /** Ordered surveys to visit. */
+  stops: RoundStop[];
+  startedAt?: string;
+  finishedAt?: string;
+}
+
+/** Per-site coordinates for outdoor wayfinding legs (admin-editable). */
+export interface SiteGeo {
+  siteId: number;
+  lat: number;
+  lng: number;
+}
+
 /** Shape of vibe.getCurrentUser() — fields are nested, there is no me.email. */
 export interface CurrentUser {
   user: {

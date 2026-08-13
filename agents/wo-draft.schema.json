@@ -1,0 +1,12 @@
+{
+  "title": "fv_wo_draft",
+  "type": "object",
+  "description": "Work order draft from a fault photo.",
+  "properties": {
+    "subject": { "type": "string", "description": "Short imperative summary, max 80 chars, no asset ids." },
+    "description": { "type": "string", "description": "2-4 sentences: what is visible, suspected cause, suggested first action. Mention the location/asset from CONTEXT when given." },
+    "priority": { "type": "string", "enum": ["High", "Medium", "Low"], "description": "High only for safety/production risk visible in the image." }
+  },
+  "required": ["subject", "description", "priority"],
+  "additionalProperties": false
+}

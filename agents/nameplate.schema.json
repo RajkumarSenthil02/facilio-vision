@@ -1,0 +1,12 @@
+{
+  "title": "fv_nameplate",
+  "type": "object",
+  "description": "Transcription of an equipment nameplate photo.",
+  "properties": {
+    "manufacturer": { "type": "string", "description": "Manufacturer as printed, or 'none' if unreadable." },
+    "model": { "type": "string", "description": "Model number as printed, or 'none'." },
+    "serial": { "type": "string", "description": "Serial number as printed, or 'none'." }
+  },
+  "required": ["manufacturer", "model", "serial"],
+  "additionalProperties": false
+}

@@ -1,6 +1,9 @@
 import type {
   Asset,
+  AssetSearch,
+  Building,
   CurrentUser,
+  Floor,
   ListQuery,
   PageResult,
   Site,
@@ -24,8 +27,20 @@ export interface DataProvider {
   login(): void;
   logout(): void;
 
+  // ---- portfolio reads (Phase 2.1) ----
   listSites(query?: ListQuery): Promise<PageResult<Site>>;
-  listSpaces(query?: ListQuery): Promise<PageResult<Space>>;
-  listAssets(query?: ListQuery): Promise<PageResult<Asset>>;
+  listBuildings(): Promise<Building[]>;
+  listFloors(): Promise<Floor[]>;
+  /**
+   * Every space in the org with ancestry attached. Fetched whole (paged
+   * underneath) because asset scoping needs the full tree; cache behind
+   * react-query, don't call in a loop.
+   */
+  listAllSpaces(): Promise<Space[]>;
+  /** Scope-aware asset search — resolves the scope to space ids internally. */
+  searchAssets(search?: AssetSearch): Promise<Asset[]>;
+  getAsset(id: number): Promise<Asset | null>;
+
+  // ---- work orders (Phase 2.2+, stubs allowed until PR-B2) ----
   listWorkOrders(query?: ListQuery): Promise<PageResult<WorkOrder>>;
 }

@@ -2,6 +2,7 @@ import { useEffect, useState, type ComponentType } from 'react';
 import ErrorBoundary from './ErrorBoundary';
 import ARScreen from '../screens/ARScreen';
 import SurveysScreen from '../screens/SurveysScreen';
+import PortfolioScreen from '../screens/PortfolioScreen';
 import DiagnosticsScreen from '../screens/DiagnosticsScreen';
 import BoomScreen from '../screens/BoomScreen';
 
@@ -16,21 +17,12 @@ interface Screen {
 const SCREENS: Screen[] = [
   { id: 'ar', label: 'AR', visible: true, component: ARScreen },
   { id: 'surveys', label: 'Surveys', visible: true, component: SurveysScreen },
-  { id: 'portfolio', label: 'Portfolio', visible: false, component: PortfolioPlaceholder },
+  { id: 'portfolio', label: 'Portfolio', visible: false, component: PortfolioScreen },
   { id: 'diagnostics', label: 'Diagnostics', visible: false, component: DiagnosticsScreen },
   { id: 'boom', label: 'Boom', visible: false, component: BoomScreen },
 ];
 
 const DEFAULT_TAB = 'ar';
-
-function PortfolioPlaceholder() {
-  return (
-    <section className="screen">
-      <h2>Portfolio</h2>
-      <p className="muted">Location picker and asset browser land here in Phase 2.</p>
-    </section>
-  );
-}
 
 function tabFromLocation(): string {
   const wanted = new URLSearchParams(window.location.search).get('tab');

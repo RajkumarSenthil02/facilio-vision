@@ -183,6 +183,56 @@ button:hover { border-color: var(--muted); }
   color: var(--muted);
 }
 
+/* ---- portfolio ---- */
+
+.location-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  margin: 16px 0;
+}
+
+.location-picker label { display: flex; flex-direction: column; gap: 4px; }
+
+select {
+  font: inherit;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  min-width: 160px;
+}
+
+select:disabled { opacity: 0.5; }
+
+.search-box {
+  font: inherit;
+  width: 100%;
+  padding: 9px 12px;
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+}
+
+.card-btn {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.link-btn {
+  border: none;
+  padding: 4px 0;
+  color: var(--muted);
+  text-decoration: underline;
+}
+
+.link-btn:hover { color: var(--fg); border: none; }
+
 /* ---- diagnostics ---- */
 
 .diag-table { border-collapse: collapse; margin-top: 12px; width: 100%; }

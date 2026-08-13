@@ -11,10 +11,30 @@ export interface Site {
   qrVal?: string;
 }
 
+export interface Building {
+  id: number;
+  name: string;
+  siteId?: number;
+}
+
+export interface Floor {
+  id: number;
+  name: string;
+  buildingId?: number;
+  siteId?: number;
+}
+
+/**
+ * A BaseSpace row with its ancestry flattened. Assets attach to the location
+ * tree through `space` ONLY — an asset's space pointer can target any level
+ * (site, building, floor, or space), so scope resolution needs all of these.
+ */
 export interface Space {
   id: number;
   name: string;
   siteId?: number;
+  buildingId?: number;
+  floorId?: number;
   spaceType?: string;
 }
 
@@ -22,8 +42,9 @@ export interface Asset {
   id: number;
   name: string;
   category?: string;
-  siteId?: number;
+  /** The BaseSpace the asset parents to — may be a site/building/floor id. */
   spaceId?: number;
+  spaceName?: string;
   qrVal?: string;
 }
 
@@ -37,6 +58,19 @@ export interface WorkOrder {
   assignedTo?: string;
   dueDate?: string; // UTC ISO 8601 — convert to local time before rendering
   createdTime?: string;
+}
+
+/** Where the user is working. Narrower fields win (floor > building > site). */
+export interface LocationScope {
+  siteId?: number;
+  buildingId?: number;
+  floorId?: number;
+}
+
+export interface AssetSearch {
+  /** Case-insensitive name match (server-side `name(contains)=`). */
+  text?: string;
+  scope?: LocationScope;
 }
 
 /** Query params shared by every facilio-cmms list action (verified schema). */

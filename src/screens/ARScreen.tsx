@@ -26,7 +26,7 @@ import { draftWorkOrder } from '../api/agents';
 import { useAsset, useAssetSearch } from '../api/hooks';
 import { useLocationScope } from '../state/LocationContext';
 import type { Asset, SiteGeo, Survey, SurveyMarker, WorkOrder } from '../api/types';
-import { ArCard, ArGuide, ArSpace } from '../ar/ArSpace';
+import { ArCard, ArGuide, ArSpace, setArPoseDelay, setArVideoSource } from '../ar/ArSpace';
 import { AssetTag, NoteTag, StandpointMarker } from '../ar/markers';
 import type { MarkerStatus } from '../ar/markers';
 import { markerAbsBearing, presenceDecayCheck, type Presence } from '../ar/presence';
@@ -45,7 +45,7 @@ import { describeEntry, resolveCode } from '../vision/codes';
 import { stampStopByCode } from '../rounds/roundsStore';
 import WorkOrderPanel from '../components/WorkOrderPanel';
 import { useGeoFix } from '../hooks/useGeoFix';
-import { arOrientation, enableArOrientation, placementOrientation, useHeading } from '../hooks/useHeading';
+import { arOrientation, enableArOrientation, placementOrientation, poseSpeedDegS, useHeading } from '../hooks/useHeading';
 import { indoorLegs, mapsDirectionsUrl, type WayLeg } from '../wayfinding/legs';
 import '../styles/ar.css';
 import '../ar/arspace.css';
@@ -234,6 +234,25 @@ export default function ARScreen() {
   const getFix = useGeoFix(arOn);
 
   const camera = useCamera(arOn);
+
+  // The projection must match the DISPLAYED camera: hand ArSpace the video
+  // element (for the real FOV + cover-crop) and how old its frames are (the
+  // pose is sampled at the frame's age; ~90ms is the measured order for
+  // mobile pipelines — without captureTime metadata it is a calibrated
+  // constant, and 0 whenever there is no live feed to lag behind).
+  useEffect(() => {
+    if (camera.state === 'live') {
+      setArVideoSource(camera.videoRef.current);
+      setArPoseDelay(90);
+    } else {
+      setArVideoSource(null);
+      setArPoseDelay(0);
+    }
+    return () => {
+      setArVideoSource(null);
+      setArPoseDelay(0);
+    };
+  }, [camera.state, camera.videoRef]);
   const scan = useScanLoop({ camera, siteId: scope.siteId, enabled: arOn });
 
   // ---- data ----
@@ -332,7 +351,15 @@ export default function ARScreen() {
       setHint('That code is enrolled on more than one standpoint — fix it in Surveys');
       return;
     }
-    const standpoint = reloc.confirmByQr(surveys, code, orient.ok ? orient.heading : undefined);
+    // Δ anchors to where the QR ACTUALLY IS: the decoder's corner geometry
+    // gives its angular offset from the camera axis, so the sticker being
+    // off-centre in the frame no longer skews every marker. Mid-pan the
+    // decode-to-pose pairing goes stale (≈3° at 30°/s) — then presence is
+    // still confirmed, just without rewriting Δ from this one hit.
+    const calm = poseSpeedDegS() < 20;
+    const qrBearing =
+      orient.ok && calm ? (orient.heading + (qrHit.offYaw ?? 0) + 360) % 360 : undefined;
+    const standpoint = reloc.confirmByQr(surveys, code, qrBearing);
     if (standpoint) {
       setPresence({ surveyId: standpoint.id, delta: reloc.current?.delta ?? 0, via: 'qr', at: Date.now() });
       setHint(`Standpoint confirmed — ${standpoint.name}`);

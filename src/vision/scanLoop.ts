@@ -9,6 +9,7 @@ import { loadSiteIndex } from './captureStore';
 import type { MatchIndex } from './matcher';
 import { frameQuality, toTinyLuma } from './quality';
 import { decodeQr } from './qr';
+import { qrAngularOffset } from '../ar/projection';
 import type { NormRect } from './types';
 
 export const TICK_MS = 300;
@@ -30,6 +31,11 @@ export interface QrHit {
   code: string;
   /** Epoch ms of the decode — a new object per (re)fire, so effects re-run. */
   at: number;
+  /** Angular offset of the code from the camera axis at decode time (deg),
+   * when the decoder reported corners. Lets presence anchor to where the QR
+   * ACTUALLY IS, not to wherever the phone happened to point. */
+  offYaw?: number;
+  offPitch?: number;
 }
 
 export interface ScanStats {
@@ -142,13 +148,21 @@ export function useScanLoop({ camera, siteId, enabled, embedder, index }: UseSca
       if (!qrBusy) {
         qrBusy = true;
         void decodeQr(frame.src, frame.w, frame.h, qrCanvas)
-          .then((code) => {
-            if (disposed || !code) return;
+          .then((hit) => {
+            if (disposed || !hit) return;
             const now = Date.now();
             // time-based dedup: the same sticker re-fires after 4s
-            if (!lastQr || lastQr.code !== code || now - lastQr.at >= QR_DEDUP_MS) {
-              lastQr = { code, at: now };
-              setQrHit({ code, at: now });
+            if (!lastQr || lastQr.code !== hit.data || now - lastQr.at >= QR_DEDUP_MS) {
+              lastQr = { code: hit.data, at: now };
+              const off = hit.corners
+                ? qrAngularOffset(hit.corners, hit.frameW, hit.frameH)
+                : null;
+              setQrHit({
+                code: hit.data,
+                at: now,
+                offYaw: off?.yawDeg,
+                offPitch: off?.pitchDeg,
+              });
             }
           })
           .finally(() => {

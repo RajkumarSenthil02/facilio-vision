@@ -53,18 +53,22 @@ describe('survey authoring — the footer must be reachable', () => {
     expect(screen.queryByRole('combobox', { name: 'Floor' })).toBeNull();
 
     await user.type(nameField, 'Plant room');
-    await user.click(screen.getByRole('button', { name: 'Start sweep' }));
+    await user.click(screen.getByRole('button', { name: /scan the standpoint code/i }));
     await waitFor(() => expect(document.body).toHaveClass('pa-open'));
 
     // the dock is NOT hidden — the stage stops where the dock begins
     expect(screen.getByRole('tab', { name: 'Surveys' })).toBeInTheDocument();
 
-    // sweep step: progress pill + its two actions
+    // QR step is the gate: its typed-code fallback must be reachable too
+    const qrFoot = document.querySelector('.pa-foot') as HTMLElement;
+    expect(document.querySelector('.pa-badge')).toHaveTextContent(/Scan the standpoint code/);
+    await user.type(within(qrFoot).getByLabelText('Standpoint code'), 'ws-qr-9');
+    await user.click(within(qrFoot).getByRole('button', { name: 'Use code' }));
+
+    // sweep step: pace tip + coverage dots + its action
+    await waitFor(() => expect(document.querySelector('.pa-badge')).toHaveTextContent(/Sweep \d+\/12/));
     const sweepFoot = document.querySelector('.pa-foot') as HTMLElement;
-    expect(document.querySelector('.pa-badge')).toHaveTextContent(/Sweep \d+\/12/);
-    expect(
-      within(sweepFoot).getByRole('button', { name: /Scan standpoint QR/ }),
-    ).toBeInTheDocument();
+    expect(document.querySelector('.pa-sweep-dots')).not.toBeNull();
     const toMarkers = within(sweepFoot).getByRole('button', { name: /Place markers/ });
     expect(toMarkers).toBeInTheDocument();
   });

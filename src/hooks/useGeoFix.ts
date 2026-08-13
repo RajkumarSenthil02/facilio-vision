@@ -21,12 +21,19 @@ export function useGeoFix(enabled: boolean): GetFix {
     if (!enabled || isMockMode() || !('geolocation' in navigator)) return;
     const id = navigator.geolocation.watchPosition(
       (pos) => {
-        fixRef.current = {
+        const fix: GeoFix = {
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
           accuracy: Math.round(pos.coords.accuracy),
           at: Date.now(),
         };
+        // Keep the BEST fresh fix, not the latest: indoors the stream
+        // oscillates (15m … 65m …) and a survey stamped with whichever
+        // reading happened to be last would carry the junk one forever.
+        const held = fixRef.current;
+        if (!held || fix.accuracy <= held.accuracy || Date.now() - held.at > MAX_AGE_MS) {
+          fixRef.current = fix;
+        }
       },
       () => {
         /* denied/unavailable — fix stays null, which is a normal answer indoors */

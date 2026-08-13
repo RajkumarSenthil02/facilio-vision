@@ -7,7 +7,24 @@
  * the quality gates use (≤640px).
  */
 interface BarcodeDetectorLike {
-  detect(source: CanvasImageSource): Promise<{ rawValue: string }[]>;
+  detect(
+    source: CanvasImageSource,
+  ): Promise<{ rawValue: string; cornerPoints?: { x: number; y: number }[] }[]>;
+}
+
+export interface QrDecode {
+  data: string;
+  /** Corner pixels IN `frameW`x`frameH` SPACE (the decode canvas), when the
+   * decoder reports them — they let the caller compute the code's angular
+   * offset from the camera axis instead of pretending it was dead-centre. */
+  corners: {
+    topLeft: { x: number; y: number };
+    topRight: { x: number; y: number };
+    bottomLeft: { x: number; y: number };
+    bottomRight: { x: number; y: number };
+  } | null;
+  frameW: number;
+  frameH: number;
 }
 
 let detector: BarcodeDetectorLike | null | undefined;
@@ -18,7 +35,7 @@ export async function decodeQr(
   srcW: number,
   srcH: number,
   work: HTMLCanvasElement,
-): Promise<string | null> {
+): Promise<QrDecode | null> {
   if (detector === undefined) {
     detector =
       'BarcodeDetector' in window
@@ -37,14 +54,40 @@ export async function decodeQr(
   try {
     if (detector) {
       const found = await detector.detect(work);
-      return found[0]?.rawValue ?? null;
+      const hit = found[0];
+      if (!hit?.rawValue) return null;
+      const c = hit.cornerPoints;
+      return {
+        data: hit.rawValue,
+        // BarcodeDetector order: top-left, top-right, bottom-right, bottom-left
+        corners:
+          c && c.length === 4
+            ? { topLeft: c[0], topRight: c[1], bottomRight: c[2], bottomLeft: c[3] }
+            : null,
+        frameW: work.width,
+        frameH: work.height,
+      };
     }
     jsqrMod ??= await import('jsqr');
     const img = ctx.getImageData(0, 0, work.width, work.height);
     const res = jsqrMod.default(img.data, img.width, img.height, {
       inversionAttempts: 'dontInvert',
     });
-    return res?.data ?? null;
+    if (!res?.data) return null;
+    const loc = res.location;
+    return {
+      data: res.data,
+      corners: loc
+        ? {
+            topLeft: loc.topLeftCorner,
+            topRight: loc.topRightCorner,
+            bottomLeft: loc.bottomLeftCorner,
+            bottomRight: loc.bottomRightCorner,
+          }
+        : null,
+      frameW: work.width,
+      frameH: work.height,
+    };
   } catch {
     return null;
   }

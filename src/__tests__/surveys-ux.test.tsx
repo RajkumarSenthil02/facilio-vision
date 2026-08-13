@@ -121,7 +121,7 @@ describe('survey detail — bottom sheet', () => {
 
     // info table rows
     const table = container.querySelector('.info-table')!;
-    expect(within(table as HTMLElement).getByText('Open Office 3F')).toBeInTheDocument();
+    expect(within(table as HTMLElement).getByText(/Open Office 3F/)).toBeInTheDocument();
     expect(within(table as HTMLElement).getByText('12 frames · ±12m fix')).toBeInTheDocument();
 
     // QR explainer + gradient CTA (no code enrolled yet)
@@ -202,7 +202,7 @@ describe('new survey point — camera + sheet', () => {
     expect(container.querySelector('select')).toBeNull();
     expect(container.querySelectorAll('.ds-select-btn')).toHaveLength(0);
 
-    const start = screen.getByRole('button', { name: 'Start sweep' });
+    const start = screen.getByRole('button', { name: /scan the standpoint code/i });
     expect(start).toHaveClass('btn-cta');
     expect(start).toBeDisabled(); // needs a name first
     await user.type(input, 'AHU room — door side');

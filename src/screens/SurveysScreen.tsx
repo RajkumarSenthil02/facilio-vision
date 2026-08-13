@@ -233,7 +233,12 @@ function SurveyDetail({ survey, onBack }: { survey: Survey; onBack: () => void }
         <tbody>
           <tr>
             <th>Location</th>
-            <td>{survey.spaceName ?? 'Unscoped'}</td>
+            <td>
+              {survey.spaceName ?? 'Unscoped'}
+              {survey.geo
+                ? ` · ${survey.geo.lat.toFixed(5)}, ${survey.geo.lng.toFixed(5)} (±${Math.round(survey.geo.accuracy)}m)`
+                : ''}
+            </td>
           </tr>
           <tr>
             <th>Surveyed</th>

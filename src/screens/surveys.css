@@ -313,3 +313,48 @@
   color: var(--ink-500);
   letter-spacing: 0.02em;
 }
+
+/* --- QR-origin step: a corner reticle over the live feed --- */
+.pa-scanframe {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  width: min(58vw, 240px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 4;
+}
+.pa-scanframe span {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  border-radius: 2px;
+}
+.pa-scanframe .tl { top: 0; left: 0; border-right: 0; border-bottom: 0; }
+.pa-scanframe .tr { top: 0; right: 0; border-left: 0; border-bottom: 0; }
+.pa-scanframe .bl { bottom: 0; left: 0; border-right: 0; border-top: 0; }
+.pa-scanframe .br { bottom: 0; right: 0; border-left: 0; border-top: 0; }
+
+/* --- sweep pace + coverage --- */
+.pa-tip-warn {
+  color: #fff;
+  background: var(--red-500, #d92d20);
+  border-radius: 4px;
+}
+.pa-sweep-dots {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  padding: 2px 0 6px;
+}
+.pa-sweep-dots .dot {
+  width: 14px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.28);
+}
+.pa-sweep-dots .dot.on {
+  background: var(--blue-400, #578aef);
+}

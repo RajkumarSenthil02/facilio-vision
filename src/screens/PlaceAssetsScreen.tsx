@@ -7,22 +7,24 @@
 // to the deterministic synthetic embedding — the survey geometry (headings,
 // markers, Δ math) is real either way.
 import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { appStore } from '../api/appStore';
 import { useAssetSearch } from '../api/hooks';
 import { isMockMode } from '../api/provider';
 import type { Asset, Survey, SurveyMarker, SweepFrame } from '../api/types';
 import { getEmbedFn, syntheticVec, EMBED_MODEL_ID } from '../ar/embedding';
 import { draftBearing } from '../wayfinding/bearingDraft';
-import { ArCard, ArSpace } from '../ar/ArSpace';
+import { ArCard, ArSpace, setArPoseDelay, setArVideoSource } from '../ar/ArSpace';
 import { AssetTag, NoteTag } from '../ar/markers';
 import DsSelect from '../components/DsSelect';
 import Sheet from '../components/Sheet';
 import { CameraView } from '../components/camera/CameraView';
 import { useCamera } from '../components/camera/useCamera';
-import { linkCode } from '../vision/codes';
+import { linkCode, resolveCode } from '../vision/codes';
+import { decodeQr } from '../vision/qr';
+import { qrAngularOffset } from '../ar/projection';
 import { useGeoFix } from '../hooks/useGeoFix';
-import { enableArOrientation, placementOrientation, useHeading } from '../hooks/useHeading';
+import { enableArOrientation, placementOrientation, poseSpeedDegS, useHeading } from '../hooks/useHeading';
 import { wrap } from '../wayfinding/bearing';
 import { useLocationScope } from '../state/LocationContext';
 import '../styles/ar.css';
@@ -44,16 +46,27 @@ function minFrames(): number {
 const CAPTURE_STEP_DEG = 28;
 
 /**
- * Name it -> sweep -> place markers.
+ * Name it -> SCAN THE STANDPOINT QR -> slow 360° sweep -> place markers.
+ *
+ * The QR is now the FIRST capture and it is mandatory: it is the survey's
+ * origin. Everything else — every marker, every sweep frame — is stored
+ * relative to the direction of that code, and every later visit re-derives
+ * the exact frame by scanning the same code (Δ = bearing-of-code-now −
+ * bearing-of-code-at-enrolment). That is what makes markers land on the same
+ * physical spots on load, on any device, whatever its compass thinks north
+ * is. A survey without a code has no origin to re-find — which is exactly
+ * the "notes load in the centre" report this replaces.
  *
  * The camera is full-bleed on every step and NOTHING covers it: chrome is
- * floating pills over the feed, and the app dock stays visible beneath (the
- * stage stops exactly where the dock begins, which is also why the footer
- * actions are reachable — they used to sit under it).
- *
- * Standpoint QR is optional and lives on the sweep step; it is not a gate.
+ * floating pills over the feed, and the app dock stays visible beneath.
  */
-type Step = 'setup' | 'sweep' | 'markers';
+type Step = 'setup' | 'qr' | 'sweep' | 'markers';
+
+/** Sweep pace gates (deg/s): capture only below CAPTURE, warn above WARN.
+ * A frame grabbed mid-swing is motion-blurred and its embedding matches
+ * nothing later — a slow sweep IS the accuracy. */
+const SWEEP_CAPTURE_MAX_DEG_S = 25;
+const SWEEP_WARN_DEG_S = 35;
 
 /** What a marker stands for. Work orders and findings are raised in place. */
 export type MarkerKind = 'asset' | 'note' | 'workorder' | 'finding';
@@ -87,19 +100,31 @@ export default function PlaceAssetsScreen({
   const [name, setName] = useState('');
   const [frames, setFrames] = useState<SweepFrame[]>([]);
   const [markers, setMarkers] = useState<SurveyMarker[]>([]);
-  // QR enrolment moved to the survey detail sheet; a new survey saves without one.
-  const qrHeading: number | undefined = undefined;
   const [hint, setHint] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // Mock stand-in for the device heading: rotated by explicit buttons.
   const [mockHeading, setMockHeading] = useState(0);
   const [markerForm, setMarkerForm] = useState<MarkerDraft | null>(null);
-  const [qrOpen, setQrOpen] = useState(false);
-  const [qrDraft, setQrDraft] = useState('');
+  /** The mandatory standpoint code — the survey's origin. */
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  /** Bearing OF THE CODE at enrolment (corner-corrected when scanned). */
+  const [qrHeading, setQrHeading] = useState<number | undefined>(undefined);
+  const [typedCode, setTypedCode] = useState('');
+  /** Live sweep pace (deg/s), sampled for the pace pill. */
+  const [sweepSpeed, setSweepSpeed] = useState(0);
   /** Sweep-frame JPEGs by frame index, uploaded at save. */
   const shotsRef = useRef<Record<number, Blob>>({});
-  const qrCode: string | null = qrDraft.trim() || null;
   const busyRef = useRef(false);
+
+  // Existing surveys — a code must identify exactly ONE standpoint, so the
+  // scan step refuses one that is already someone else's origin.
+  const surveysQuery = useQuery({
+    queryKey: ['surveys'],
+    queryFn: () =>
+      appStore
+        .kvList<Survey>('surveys', 'survey.', 200)
+        .then((rows) => rows.map((r) => r.value).filter((s) => s && Array.isArray(s.markers))),
+  });
 
   // Camera-first: the live feed runs from the moment the overlay opens — the
   // setup sheet sits OVER the lens instead of hiding it behind a form.
@@ -145,6 +170,88 @@ export default function PlaceAssetsScreen({
     return () => document.body.classList.remove('pa-open');
   }, []);
 
+  // Authoring must render markers through the SAME projection the AR screen
+  // will use — the FOV comes from the real video, the pose from the frame's
+  // age. Otherwise a card sits one place while placing and another on load.
+  useEffect(() => {
+    if (camera.state === 'live') {
+      setArVideoSource(camera.videoRef.current);
+      setArPoseDelay(90);
+    } else {
+      setArVideoSource(null);
+      setArPoseDelay(0);
+    }
+    return () => {
+      setArVideoSource(null);
+      setArPoseDelay(0);
+    };
+  }, [camera.state, camera.videoRef]);
+
+  /**
+   * Accept a code as this survey's origin. The heading captured here is the
+   * bearing OF THE CODE (aim + its in-frame angular offset when scanned) —
+   * scanning it on a later visit yields Δ exactly, which is what puts every
+   * marker back on its physical spot.
+   */
+  const acceptCode = (code: string, offYawDeg = 0): void => {
+    const clean = code.trim();
+    if (!clean) return;
+    const taken = (surveysQuery.data ?? []).find((sv) => sv.qrCode === clean);
+    if (taken) {
+      setHint(`That code is already the origin of “${taken.name}” — one code, one standpoint`);
+      return;
+    }
+    void (async () => {
+      const res = await resolveCode(clean);
+      if (res.kind === 'target' && res.entry.type !== 'survey') {
+        setHint(`That code points at ${res.entry.type === 'asset' ? 'an asset' : 'a space'} — use a fresh sticker for the standpoint`);
+        return;
+      }
+      const aim = mock ? { heading: mockHeading } : placementOrientation();
+      setQrCode(clean);
+      setQrHeading(aim ? (aim.heading + offYawDeg + 360) % 360 : undefined);
+      if (!aim && !mock) {
+        setHint('Code locked, but no compass — markers will rely on scanning this code');
+      }
+      setStep('sweep');
+    })();
+  };
+
+  // Step 'qr': continuously decode the live frame. The camera IS the scanner —
+  // no separate mode, no shutter, walking up to the sticker is the interaction.
+  useEffect(() => {
+    if (step !== 'qr' || mock) return;
+    const work = document.createElement('canvas');
+    let busy = false;
+    const timer = setInterval(() => {
+      if (busy) return;
+      const src = cameraFrame();
+      if (!src) return;
+      const w = src instanceof HTMLVideoElement ? src.videoWidth : (src as HTMLCanvasElement).width;
+      const h = src instanceof HTMLVideoElement ? src.videoHeight : (src as HTMLCanvasElement).height;
+      if (!w || !h) return;
+      busy = true;
+      void decodeQr(src, w, h, work)
+        .then((hit) => {
+          if (!hit) return;
+          const off = hit.corners ? qrAngularOffset(hit.corners, hit.frameW, hit.frameH) : null;
+          acceptCode(hit.data, off?.yawDeg ?? 0);
+        })
+        .finally(() => {
+          busy = false;
+        });
+    }, 400);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, mock, surveysQuery.data]);
+
+  // Step 'sweep': sample the rotation pace for the pace pill.
+  useEffect(() => {
+    if (step !== 'sweep' || mock) return;
+    const t = setInterval(() => setSweepSpeed(poseSpeedDegS()), 250);
+    return () => clearInterval(t);
+  }, [step, mock]);
+
   const captureFrame = async (heading: number, pitch: number) => {
     if (busyRef.current) return;
     busyRef.current = true;
@@ -172,10 +279,14 @@ export default function PlaceAssetsScreen({
     }
   };
 
-  // Live guided sweep: auto-capture a frame every ~30° of heading change.
+  // Live guided sweep: auto-capture a frame every ~30° of heading change —
+  // but ONLY while the rotation is slow. A frame grabbed mid-swing is blurred
+  // and its embedding never matches again; refusing it makes the technician
+  // slow down, which is the entire point of the pace UI.
   useEffect(() => {
     if (step !== 'sweep' || mock) return;
     if (!pose.ok || frames.length >= MAX_FRAMES) return;
+    if (poseSpeedDegS() > SWEEP_CAPTURE_MAX_DEG_S) return;
     const last = frames[frames.length - 1];
     if (!last || Math.abs(wrap(pose.heading - last.heading)) >= CAPTURE_STEP_DEG) {
       void captureFrame(pose.heading, pose.pitch);
@@ -251,7 +362,7 @@ export default function PlaceAssetsScreen({
         spaceName: names.floor ?? names.building ?? names.site,
         geo: getFix(), // null is fine — indoors is the normal case
         qrCode: qrCode ?? undefined,
-        qrHeading: qrCode ? qrHeading : undefined,
+        qrHeading: qrCode != null ? qrHeading : undefined,
         sweep: withPhotos,
         markers,
         modelId: EMBED_MODEL_ID,
@@ -280,9 +391,11 @@ export default function PlaceAssetsScreen({
             ← Exit survey
           </button>
           <span className={step === 'sweep' ? 'pa-badge sweep' : 'pa-badge'}>
-            {step === 'sweep'
-              ? `Sweep ${Math.min(frames.length, MAX_FRAMES)}/${MAX_FRAMES}`
-              : `${markers.length} marker${markers.length === 1 ? '' : 's'}`}
+            {step === 'qr'
+              ? 'Scan the standpoint code'
+              : step === 'sweep'
+                ? `Sweep ${Math.min(frames.length, MAX_FRAMES)}/${MAX_FRAMES}`
+                : `${markers.length} marker${markers.length === 1 ? '' : 's'}`}
           </span>
         </>
       )}
@@ -318,16 +431,17 @@ export default function PlaceAssetsScreen({
                 disabled={!name.trim()}
                 onClick={() => {
                   void enableArOrientation(); // iOS gate — this click is the user gesture
-                  setStep('sweep');
+                  setStep('qr');
                 }}
               >
-                Start sweep
+                Start — scan the standpoint code
               </button>
               <p className="sv-help">
                 {scopeLabel
                   ? `Saved under ${scopeLabel}. `
                   : 'Saved without a location — set one on the Surveys screen. '}
-                Stand where a technician would stand, then turn and tap each asset.
+                Stick a QR at this spot first: it becomes the survey’s origin, and
+                scanning it later is what loads every marker back in its exact place.
               </p>
             </Sheet>
           </>
@@ -396,13 +510,51 @@ export default function PlaceAssetsScreen({
         {hint && <div className="ar-hint" role="status">{hint}</div>}
       </div>
 
+      {step === 'qr' && (
+        <>
+          <div className="pa-scanframe" aria-hidden="true">
+            <span className="tl" /><span className="tr" /><span className="bl" /><span className="br" />
+          </div>
+          <div className="pa-foot sweep">
+            <p className="pa-tip">
+              Point the camera at the standpoint’s QR sticker — it locks in as this
+              survey’s origin
+            </p>
+            <div className="pa-actions">
+              <input
+                className="sv-input"
+                aria-label="Standpoint code"
+                value={typedCode}
+                onChange={(e) => setTypedCode(e.target.value)}
+                placeholder="No sticker scanner? Type the code"
+              />
+              <button
+                className="pa-btn light"
+                disabled={!typedCode.trim()}
+                onClick={() => acceptCode(typedCode)}
+              >
+                Use code
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       {step === 'sweep' && (
         <div className="pa-foot sweep">
-          <p className="pa-tip">Rotate slowly in place — frames capture automatically</p>
+          {!mock && sweepSpeed > SWEEP_WARN_DEG_S ? (
+            <p className="pa-tip pa-tip-warn" role="status">Too fast — slow right down, frames only capture when steady</p>
+          ) : (
+            <p className="pa-tip">
+              Start facing the code, then rotate slowly in place — frames capture on their own
+            </p>
+          )}
+          <div className="pa-sweep-dots" aria-hidden="true">
+            {Array.from({ length: MAX_FRAMES }, (_, i) => (
+              <span key={i} className={i < frames.length ? 'dot on' : 'dot'} />
+            ))}
+          </div>
           <div className="pa-actions">
-            <button className="pa-btn dark" onClick={() => setQrOpen(true)}>
-              Scan standpoint QR (optional)
-            </button>
             <button
               className="pa-btn light"
               disabled={frames.length < minFrames()}
@@ -413,31 +565,6 @@ export default function PlaceAssetsScreen({
           </div>
         </div>
       )}
-
-      <Sheet
-        open={qrOpen}
-        title="Standpoint QR (optional)"
-        onClose={() => setQrOpen(false)}
-        footer={
-          <button className="btn-quiet" style={{ flex: 1 }} onClick={() => setQrOpen(false)}>
-            Done
-          </button>
-        }
-      >
-        <p className="sv-help" style={{ marginTop: 0 }}>
-          Stick a code at this spot and technicians load these markers by scanning it — no
-          searching. You can also add one later from the survey's detail sheet.
-        </p>
-        <label className="sv-field">
-          <span className="sv-field-label">Code</span>
-          <input
-            className="sv-input"
-            value={qrDraft}
-            onChange={(e) => setQrDraft(e.target.value)}
-            placeholder="Scan or type the code"
-          />
-        </label>
-      </Sheet>
 
       {step === 'markers' && (
         <div className="pa-foot">

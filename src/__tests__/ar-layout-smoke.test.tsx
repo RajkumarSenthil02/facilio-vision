@@ -17,7 +17,7 @@ import {
 
 const CARD_W = 200;
 const CARD_H = 64;
-const CARD_BASE_Y = 0.42;
+const CARD_BASE_Y = 0.5;
 
 let widthSpy: PropertyDescriptor | undefined;
 let heightSpy: PropertyDescriptor | undefined;
@@ -50,7 +50,7 @@ interface Rect {
 /** The rAF loop writes transforms straight to the DOM — read them back. */
 function rectOf(el: HTMLElement): Rect | null {
   const m = el.style.transform.match(
-    /translate\(calc\(-50% \+ (-?[\d.]+)px\), calc\(-50% \+ (-?[\d.]+)px\)\) scale\(([\d.]+)\)/,
+    /translate3d\(calc\(-50% \+ (-?[\d.]+)px\), calc\(-50% \+ (-?[\d.]+)px\), 0\) scale\(([\d.]+)\)/,
   );
   if (!m) return null;
   const [dx, dy, scale] = [Number(m[1]), Number(m[2]), Number(m[3])];
@@ -79,7 +79,7 @@ function Stage({ markers }: { markers: { id: string; heading: number; pitch: num
 
 function cardsOf(container: HTMLElement): HTMLElement[] {
   // hidden cards keep their last transform — only the visible ones are "laid out"
-  return [...container.querySelectorAll<HTMLElement>('div[style*="translate"]')].filter(
+  return [...container.querySelectorAll<HTMLElement>('div[style*="translate3d"]')].filter(
     (el) => el.style.visibility !== 'hidden',
   );
 }

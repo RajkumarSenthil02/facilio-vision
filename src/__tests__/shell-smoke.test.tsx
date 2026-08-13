@@ -22,8 +22,8 @@ describe('shell-smoke', () => {
     expect(screen.queryByRole('tab', { name: 'Diagnostics' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Boom' })).not.toBeInTheDocument();
 
-    // Default tab renders
-    expect(screen.getByRole('heading', { name: 'AR' })).toBeInTheDocument();
+    // Default tab renders the AR stage
+    expect(await screen.findByText('Preview — camera lands in Phase 3')).toBeInTheDocument();
   });
 
   it('switches tabs and rewrites only the tab param', async () => {

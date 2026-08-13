@@ -1,0 +1,433 @@
+/* =========================================================
+   AR HUD + marker family — Vision AR System design, Dock HUD
+   direction (1b) + shared foundations 01–03.
+   Everything here renders OVER a camera feed: dark scrim
+   discipline, no backdrop-filter (webview cost), readable on
+   any background.
+   ========================================================= */
+
+@keyframes vsPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.82); }
+}
+
+@keyframes vsRing {
+  0% { opacity: 0.55; transform: scale(0.7); }
+  100% { opacity: 0; transform: scale(1.6); }
+}
+
+/* ---------- stage ---------- */
+
+.ar-stage {
+  position: relative;
+  height: calc(100vh - 42px); /* under the tab bar */
+  min-height: 480px;
+  overflow: hidden;
+  background: var(--hud-bg);
+  color: #fff;
+  font-family: var(--font-sans);
+}
+
+/* top + bottom scrims so chrome stays readable over any feed */
+.ar-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(11, 18, 32, 0.78) 0%,
+    rgba(11, 18, 32, 0.26) 20%,
+    rgba(11, 18, 32, 0) 38%,
+    rgba(11, 18, 32, 0.4) 72%,
+    rgba(11, 18, 32, 0.9) 100%
+  );
+}
+
+/* Zone D crosshair — placement pointer, dead centre */
+.ar-crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 36px;
+  height: 36px;
+  pointer-events: none;
+}
+
+.ar-crosshair span { position: absolute; background: rgba(255, 255, 255, 0.7); }
+.ar-crosshair .n { top: 0; left: 50%; width: 1px; height: 10px; }
+.ar-crosshair .s { bottom: 0; left: 50%; width: 1px; height: 10px; }
+.ar-crosshair .w { left: 0; top: 50%; height: 1px; width: 10px; }
+.ar-crosshair .e { right: 0; top: 50%; height: 1px; width: 10px; }
+
+/* ---------- chip taxonomy (foundation 01) ---------- */
+
+/* Zone A+B: one 38px bar — site context, state, AR toggle (dock direction) */
+.ar-topbar {
+  position: absolute;
+  top: 8px;
+  left: 16px;
+  right: 16px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  padding: 0 12px;
+  background: rgba(16, 24, 38, 0.74);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-lg);
+}
+
+.ar-context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.ar-topbar-divider { width: 1px; height: 18px; background: rgba(255, 255, 255, 0.18); }
+
+.ar-state {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+}
+
+.ar-state .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ar-state-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  flex: 0 0 6px;
+}
+
+.ar-state.verifying .ar-state-dot { background: var(--brand-indigo-400); animation: vsPulse 1.4s var(--ease-standard) infinite; }
+.ar-state.locked .ar-state-dot { background: var(--success-500); }
+.ar-state.idle .ar-state-dot { background: rgba(255, 255, 255, 0.5); }
+.ar-state.failed .ar-state-dot { background: var(--danger-500); }
+
+.ar-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.ar-toggle.on { background: rgba(0, 89, 214, 0.9); }
+
+/* Standpoint banner — context class, outranks floor and site */
+.ar-standpoint {
+  position: absolute;
+  top: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 12px;
+  background: rgba(41, 160, 30, 0.94);
+  border: none;
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ---------- marker family (foundation 03) ---------- */
+
+/* Asset tag: head + 4px status edge. Width 186–214px. */
+.ar-asset-tag {
+  position: absolute;
+  width: 200px;
+  display: flex;
+  background: var(--hud-surface-strong);
+  border: 1px solid var(--hud-border-strong);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+  transition: transform var(--dur-base) var(--ease-standard), opacity var(--dur-base) var(--ease-standard);
+}
+
+.ar-asset-tag .edge { width: 4px; flex: 0 0 4px; }
+.ar-asset-tag .body { flex: 1; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.ar-asset-tag .name { color: #fff; font-size: 14px; font-weight: 500; line-height: 18px; }
+.ar-asset-tag .sub { color: var(--hud-text-dim); font-size: 11px; line-height: 14px; }
+.ar-asset-tag .counts { display: flex; gap: 6px; padding-top: 2px; }
+
+.ar-asset-tag.selected {
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 3px rgba(0, 89, 214, 0.2), 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.ar-asset-tag.decaying { opacity: 0.5; }
+.ar-asset-tag.dragging {
+  transform: scale(1.04);
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(16, 24, 38, 0.6);
+}
+
+/* status colours: the ONLY colour that varies across the family */
+.st-red { background: var(--danger-500); }
+.st-amber { background: var(--warning-500); }
+.st-green { background: var(--success-500); }
+
+.ar-count {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.ar-count.open { background: var(--danger-500); color: #fff; }
+.ar-count.planned { background: rgba(255, 212, 5, 0.92); color: var(--ink-900); }
+
+/* Note tag: always amber, never status-coloured. */
+.ar-note-tag {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 190px;
+  padding: 8px 10px;
+  background: rgba(16, 24, 38, 0.86);
+  border: 1px solid rgba(255, 212, 5, 0.6);
+  border-left: 4px solid var(--warning-500);
+  border-radius: var(--radius-lg);
+  color: #fff;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ar-note-tag .txt {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Work-order pin: badge floats above its stem anchor */
+.ar-wo-pin {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.ar-wo-pin .head {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: #fff;
+}
+
+.ar-wo-pin .head.st-amber { color: var(--ink-900); }
+.ar-wo-pin .stem { width: 1.5px; height: 16px; background: rgba(255, 255, 255, 0.6); }
+.ar-wo-pin .anchor { width: 6px; height: 6px; border-radius: var(--radius-pill); background: rgba(255, 255, 255, 0.85); }
+
+/* Survey standpoint: green, always. Ring pulses only while re-localizing. */
+.ar-standpoint-marker {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: #fff;
+}
+
+.ar-standpoint-marker .head {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(41, 160, 30, 0.92);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: var(--radius-pill);
+}
+
+.ar-standpoint-marker.relocalizing .head::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid rgba(41, 160, 30, 0.7);
+  animation: vsRing 2s var(--ease-standard) infinite;
+}
+
+.ar-standpoint-marker .lbl { font-size: 11px; font-weight: 500; }
+
+/* Minimized dot: 14px, status colour, slow pulse ring */
+.ar-min-dot {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.ar-min-dot .dot {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-pill);
+}
+
+.ar-min-dot .dot.st-green { box-shadow: 0 0 0 3px rgba(41, 160, 30, 0.28); }
+.ar-min-dot .dot.st-red { box-shadow: 0 0 0 3px rgba(182, 25, 25, 0.28); }
+.ar-min-dot .dot.st-amber { box-shadow: 0 0 0 3px rgba(255, 212, 5, 0.28); }
+
+.ar-min-dot .dot::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid currentColor;
+  animation: vsRing 2s var(--ease-standard) infinite;
+}
+
+.ar-min-dot .dot.st-green::after { color: var(--success-500); }
+.ar-min-dot .dot.st-red::after { color: var(--danger-500); }
+.ar-min-dot .dot.st-amber::after { color: var(--warning-500); }
+
+.ar-min-dot .lbl { color: rgba(255, 255, 255, 0.75); font-size: 10px; letter-spacing: 0.02em; }
+
+/* ---------- zone E: candidate chips ---------- */
+
+.ar-candidates {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 96px;
+  display: flex;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.ar-candidate {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-md);
+  background: rgba(16, 24, 38, 0.72);
+  color: #fff;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ar-candidate.top {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: transparent;
+  color: var(--ink-900);
+  font-weight: 500;
+}
+
+.ar-candidate .dot { width: 7px; height: 7px; border-radius: var(--radius-pill); }
+.ar-candidate .score { font-family: var(--font-mono); font-size: 11px; color: var(--ink-600); }
+.ar-candidate:not(.top) .score { color: rgba(255, 255, 255, 0.6); }
+
+/* ---------- zone F: dock (hidden in embedded mode) ---------- */
+
+.ar-dock {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 52px;
+  padding: 0 8px;
+  background: rgba(16, 24, 38, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-xl);
+}
+
+.embedded .ar-dock { display: none; }
+
+.ar-dock-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ar-dock-btn.active { background: rgba(255, 255, 255, 0.1); }
+
+.ar-dock-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--blue-500);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+}

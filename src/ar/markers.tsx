@@ -43,18 +43,22 @@ export function AssetTag({
   ]
     .filter(Boolean)
     .join(' ');
+  // The status dot doubles as the ANCHOR: it sits exactly on the projected
+  // point (the pixel that was aimed at placement); the plate hangs below.
   return (
     <button className={cls} style={style} onClick={onClick}>
       <span className={`edge ${STATUS_CLASS[status]}`} />
-      <span className="body">
-        <span className="name">{name}</span>
-        {sub && <span className="sub">{sub}</span>}
-        {(openCount > 0 || plannedCount > 0) && (
-          <span className="counts">
-            {openCount > 0 && <span className="ar-count open">{openCount} open</span>}
-            {plannedCount > 0 && <span className="ar-count planned">{plannedCount} planned</span>}
-          </span>
-        )}
+      <span className="plate">
+        <span className="body">
+          <span className="name">{name}</span>
+          {sub && <span className="sub">{sub}</span>}
+          {(openCount > 0 || plannedCount > 0) && (
+            <span className="counts">
+              {openCount > 0 && <span className="ar-count open">{openCount} open</span>}
+              {plannedCount > 0 && <span className="ar-count planned">{plannedCount} planned</span>}
+            </span>
+          )}
+        </span>
       </span>
     </button>
   );
@@ -71,11 +75,14 @@ export function NoteTag({
 }) {
   return (
     <button className="ar-note-tag" style={style} onClick={onClick}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFD405" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flex: '0 0 16px' }} aria-hidden="true">
-        <path d="M5 4h9l5 5v11H5z" />
-        <path d="M14 4v5h5" />
-      </svg>
-      <span className="txt">{text}</span>
+      <span className="anchor st-amber" aria-hidden="true" />
+      <span className="plate">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFD405" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flex: '0 0 16px' }} aria-hidden="true">
+          <path d="M5 4h9l5 5v11H5z" />
+          <path d="M14 4v5h5" />
+        </svg>
+        <span className="txt">{text}</span>
+      </span>
     </button>
   );
 }

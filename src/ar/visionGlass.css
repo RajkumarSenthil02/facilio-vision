@@ -396,3 +396,14 @@
 /* the title bar doubles as the window's move handle */
 .vg-bar-grab { cursor: grab; touch-action: none; }
 .vg-bar-grab:active { cursor: grabbing; }
+
+/* the window's anchor: the point the asset was placed at */
+.vg-anchor-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #64d2ff;
+  box-shadow: 0 0 0 3px rgba(100, 210, 255, 0.28);
+}
+
+button.vg-ornament { border: none; cursor: pointer; }

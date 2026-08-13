@@ -190,3 +190,29 @@ it('minimize sends the window to a DOT; tapping the dot brings it back', async (
   await user.click(dot);
   expect(await screen.findByRole('complementary')).toBeInTheDocument();
 });
+
+it('the open window WINS the stacking war, anchors on its dot, and always offers the summary ornament', async () => {
+  seed();
+  const user = await standAtStandpoint();
+  const marker = await screen.findByRole('button', { name: /AHU-03/ });
+
+  // markers lead with the anchor dot — the pixel that was aimed at placement
+  expect(marker.querySelector('.edge')).not.toBeNull();
+  expect(marker.querySelector('.plate')).not.toBeNull();
+
+  await user.click(marker);
+  const panel = await screen.findByRole('complementary');
+
+  // the card hosting the OPEN window is lifted above sibling nameplates
+  // (each card is its own stacking context, so the z-index sits on the card)
+  const card = panel.closest('div[style*="translate"]') as HTMLElement;
+  expect(card.style.zIndex).toBe('5');
+
+  // the summary ornament is ALWAYS there: without a configured link template
+  // it routes to Settings instead of silently vanishing
+  await user.click(within(panel).getByRole('button', { name: /Work orders/ }));
+  await user.click(await within(panel).findByRole('button', { name: /AHU-03 vibration/ }));
+  expect(
+    screen.getByRole('button', { name: /Open summary — set link in Settings/ }),
+  ).toBeInTheDocument();
+});

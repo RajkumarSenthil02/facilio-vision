@@ -78,6 +78,7 @@ export default function EffiOverlay({
   captureFrame,
   onUiAction,
   woUrl,
+  hideOrb,
 }: {
   open: boolean;
   onOpenChange(open: boolean): void;
@@ -88,6 +89,8 @@ export default function EffiOverlay({
   onUiAction?: (verb: VoiceUiVerb) => void;
   /** Deep-link template — puts "Open work order" on the reply card. */
   woUrl?: (id: number) => string | null;
+  /** An open AR window owns that corner — the idle orb yields to it. */
+  hideOrb?: boolean;
 }) {
   const { scope, names } = useLocationScope();
   const [phase, setPhase] = useState<Phase>('idle');
@@ -312,7 +315,7 @@ export default function EffiOverlay({
       )}
 
       {/* the orb — floats above every AR surface, clear of the marker field */}
-      {phase === 'idle' && (
+      {phase === 'idle' && !hideOrb && (
         <div className="ef-orb-slot">
           <span className="ef-hint">Tap to talk</span>
           <button

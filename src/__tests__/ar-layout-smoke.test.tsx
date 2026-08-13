@@ -47,18 +47,19 @@ interface Rect {
   bottom: number;
 }
 
-/** The rAF loop writes transforms straight to the DOM — read them back. */
+/** The rAF loop writes transforms straight to the DOM — read them back.
+ * Cards are TOP-ANCHORED: the top-centre sits on the projected point, so the
+ * anchor dot is the aimed pixel and the plate hangs below it. */
 function rectOf(el: HTMLElement): Rect | null {
   const m = el.style.transform.match(
-    /translate3d\(calc\(-50% \+ (-?[\d.]+)px\), calc\(-50% \+ (-?[\d.]+)px\), 0\) scale\(([\d.]+)\)/,
+    /translate3d\(calc\(-50% \+ (-?[\d.]+)px\), (-?[\d.]+)px, 0\) scale\(([\d.]+)\)/,
   );
   if (!m) return null;
   const [dx, dy, scale] = [Number(m[1]), Number(m[2]), Number(m[3])];
   const cx = window.innerWidth / 2 + dx;
-  const cy = window.innerHeight * CARD_BASE_Y + dy;
+  const top = window.innerHeight * CARD_BASE_Y + dy;
   const w = (CARD_W * scale) / 2;
-  const h = (CARD_H * scale) / 2;
-  return { left: cx - w, right: cx + w, top: cy - h, bottom: cy + h };
+  return { left: cx - w, right: cx + w, top, bottom: top + CARD_H * scale };
 }
 
 function overlaps(a: Rect, b: Rect): boolean {

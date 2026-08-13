@@ -163,10 +163,13 @@ function layout() {
   const placed: { x: number; top: number; bottom: number }[] = [];
   for (const v of visible) {
     const w = v.n.el.offsetWidth || 200;
+    // TOP-ANCHORED: the element's top-centre sits ON the projected point —
+    // every marker leads with its anchor dot, so the dot is the pixel the
+    // technician aimed at, and the plate hangs below it.
     // hard floor: the candidates row + dock band stays free of cards
-    const maxY = viewH * (1 - CARD_BASE_Y) - DOCK_CLEAR_PX - v.h / 2;
+    const maxY = viewH * (1 - CARD_BASE_Y) - DOCK_CLEAR_PX - v.h;
     const overlaps = (p: { x: number; top: number; bottom: number }, y: number) =>
-      Math.abs(p.x - v.x) < w * 0.75 && y - v.h / 2 < p.bottom && y + v.h / 2 > p.top;
+      Math.abs(p.x - v.x) < w * 0.75 && y < p.bottom && y + v.h > p.top;
     // Anchoring beats tidiness: a card may be nudged clear of a neighbour, but
     // only within MAX_DECLUTTER_PX of where its projection actually puts it.
     const anchorY = v.y;
@@ -174,7 +177,7 @@ function layout() {
     for (let guard = 0; guard < 6; guard++) {
       const clash = placed.find((p) => overlaps(p, y));
       if (!clash) break;
-      const next = clash.bottom + v.h / 2 + 8;
+      const next = clash.bottom + 8;
       if (Math.abs(next - anchorY) > MAX_DECLUTTER_PX) break;
       y = next;
     }
@@ -183,15 +186,15 @@ function layout() {
       for (let guard = 0; guard < 6; guard++) {
         const clash = placed.find((p) => overlaps(p, y));
         if (!clash) break;
-        const next = clash.top - v.h / 2 - 8;
+        const next = clash.top - v.h - 8;
         if (Math.abs(next - anchorY) > MAX_DECLUTTER_PX) break;
         y = next;
       }
     }
-    placed.push({ x: v.x, top: y - v.h / 2, bottom: y + v.h / 2 });
+    placed.push({ x: v.x, top: y, bottom: y + v.h });
     const scale = Math.max(0.7, 1 - Math.abs(v.dxDeg) / 140);
     // translate3d keeps the card on the compositor thread
-    v.n.el.style.transform = `translate3d(calc(-50% + ${v.x.toFixed(1)}px), calc(-50% + ${y.toFixed(1)}px), 0) scale(${scale.toFixed(3)})`;
+    v.n.el.style.transform = `translate3d(calc(-50% + ${v.x.toFixed(1)}px), ${y.toFixed(1)}px, 0) scale(${scale.toFixed(3)})`;
   }
 }
 
@@ -235,6 +238,9 @@ export function ArCard(props: {
   edgeLabel?: string;
   onEdgeClick?: () => void;
   onMove?: (dHeading: number, dPitch: number) => void;
+  /** An OPEN window must not be buried by sibling nameplates: each card is a
+   * stacking context (transform), so the card itself carries the z-index. */
+  lift?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const edgeRef = useRef<HTMLButtonElement>(null);
@@ -305,6 +311,8 @@ export function ArCard(props: {
         pointerEvents: 'auto',
         willChange: 'transform',
         touchAction: 'none',
+        transformOrigin: 'top center',
+        zIndex: props.lift ? 5 : undefined,
       }}
     >
       {props.children}

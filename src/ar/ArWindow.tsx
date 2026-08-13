@@ -107,12 +107,31 @@ export default function ArWindow({
       className="vg-anchor"
       style={winOff.x || winOff.y ? { transform: `translate(${winOff.x}px, ${winOff.y}px)` } : undefined}
     >
-      {/* ornament: floats OUTSIDE the window's top edge, visionOS-style */}
-      {link && (
+      <span className="vg-anchor-dot" aria-hidden="true" />
+      {/* ornament: floats OUTSIDE the window's top edge, visionOS-style.
+          ALWAYS present — with a link template it opens the real summary
+          page; without one it walks the admin to Settings, because an
+          affordance that silently vanishes reads as a bug in the field. */}
+      {link ? (
         <a className="vg-ornament" href={link} target="_blank" rel="noopener noreferrer">
           <Icon name="external" size={14} />
           {view.kind === 'wo' ? 'Open summary in Facilio' : 'Open in Facilio'}
         </a>
+      ) : (
+        <button
+          type="button"
+          className="vg-ornament"
+          title="Set your org's summary URL in Settings"
+          onClick={() => {
+            const url = new URL(window.location.href);
+            url.searchParams.set('tab', 'settings');
+            window.history.pushState({}, '', url);
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          }}
+        >
+          <Icon name="external" size={14} />
+          {view.kind === 'wo' ? 'Open summary — set link in Settings' : 'Open in Facilio — set link'}
+        </button>
       )}
 
       <aside className="vg-window" role="complementary" aria-label={asset.name}>

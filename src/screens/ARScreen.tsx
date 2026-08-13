@@ -876,6 +876,7 @@ export default function ARScreen() {
                   pitch={shown.pitch}
                   edgeLabel={marker.label}
                   onEdgeClick={() => startGuide(shown.bearing, marker.label)}
+                  lift={isWindow}
                 >
                   {isDotted ? (
                     // minimized: a status dot + label, tap to restore
@@ -1272,6 +1273,7 @@ Aim captured — lower the phone to type, the pin stays where you pointed.
         <EffiOverlay
           open={sheet === 'voice'}
           onOpenChange={(next) => setSheet(next ? 'voice' : null)}
+          hideOrb={focusAssetId != null}
           assetInView={
             focusAsset.data ? { id: focusAsset.data.id, name: focusAsset.data.name } : undefined
           }

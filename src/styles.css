@@ -381,7 +381,7 @@ button:hover { border-color: var(--muted); }
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  height: 32px;
+  height: 36px;
   padding: 0 10px;
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
@@ -402,6 +402,7 @@ button:hover { border-color: var(--muted); }
 .ds-select-btn:disabled { opacity: 0.5; cursor: default; }
 
 .ds-select-value.placeholder { color: var(--text-muted); font-weight: 400; }
+.ds-select-caret { flex: none; color: var(--ink-500); }
 
 .ds-select-pop {
   /* fixed so no ancestor scroller/overflow can clip it */
@@ -421,16 +422,102 @@ button:hover { border-color: var(--muted); }
 }
 
 .ds-select-opt {
-  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 10px;
   border-radius: var(--radius-sm);
-  font: 400 13px/1.3 var(--font-sans);
-  color: var(--ink-700);
+  font: 400 14px/1.3 var(--font-sans);
+  color: var(--ink-800, var(--ink-900));
   cursor: pointer;
 }
 
-.ds-select-opt.active { background: var(--ink-050); color: var(--ink-900); }
-.ds-select-opt.selected { background: var(--blue-025); color: var(--blue-600); font-weight: 500; }
-.ds-select-empty { padding: 7px 10px; font-size: 13px; color: var(--text-muted); }
+.ds-select-opt-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-select-opt.active { background: var(--ink-050); }
+.ds-select-opt.selected { color: var(--blue-600); font-weight: 500; }
+.ds-select-tick { flex: none; color: var(--blue-500); }
+.ds-select-empty { padding: 10px; font-size: 14px; color: var(--text-muted); }
+
+/* ---- touch presentation: a bottom action sheet ----
+   A popover next to a control that already lives in a sheet has nowhere to
+   go; it flips up and covers the context you are choosing for. */
+.ds-sheet-root {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.ds-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  background: rgba(11, 18, 32, 0.42);
+}
+
+.ds-sheet-panel {
+  position: relative;
+  background: var(--bg-surface);
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 -12px 40px rgba(40, 54, 72, 0.22);
+  max-height: 70%;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--safe-b);
+  animation: dsSheetUp var(--dur-slow) var(--ease-standard);
+}
+
+.ds-sheet-grip {
+  width: 40px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--ink-200);
+  margin: 10px auto 2px;
+  flex: none;
+}
+
+.ds-sheet-title {
+  margin: 0;
+  padding: 6px 20px 10px;
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--ink-500);
+  flex: none;
+}
+
+.ds-sheet-list {
+  margin: 0;
+  padding: 0 8px 8px;
+  list-style: none;
+  flex: 1;
+  min-height: 0;
+}
+
+.ds-sheet-list .ds-select-opt {
+  min-height: 48px;
+  padding: 0 12px;
+  font-size: 15px;
+  border-radius: var(--radius-md);
+}
+
+.ds-sheet-list .ds-select-opt + .ds-select-opt { border-top: 1px solid var(--border-subtle); }
+.ds-sheet-list .ds-select-opt.selected { background: var(--blue-025); }
+
+@keyframes dsSheetUp {
+  from { transform: translateY(12%); opacity: 0.7; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-sheet-panel { animation: none; }
+}
 
 .btn {
   display: inline-flex;

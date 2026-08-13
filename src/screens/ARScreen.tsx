@@ -687,24 +687,20 @@ export default function ARScreen() {
         <span className="e" />
       </div>
 
-      {/* mid-screen hint pills — the second one carries the action */}
+      {/* The camera is the content — chrome never sits in the middle of it.
+          The state chip up top already says what we are doing ("Looking for a
+          standpoint…"), so the only thing worth surfacing here is the ACTION,
+          as one compact chip tucked under the top band. */}
       <div className="ar-hints">
         {arOn && minimized && (
-          <button className="ar-pill ar-pill-action ar-board-restore" onClick={() => setBoardMinimized(false)}>
+          <button className="ar-pill ar-pill-action" onClick={() => setBoardMinimized(false)}>
             Restore markers ({markers.length})
           </button>
         )}
         {arOn && !presence && (
-          <>
-            <p className="ar-pill">
-              {camera.state === 'unavailable'
-                ? 'No camera here — name the standpoint to place its markers'
-                : 'Stand at a standpoint — pan slowly to locate'}
-            </p>
-            <button className="ar-pill ar-pill-action" onClick={() => setSheet('stand')}>
-              Show markers anyway (compass-only)
-            </button>
-          </>
+          <button className="ar-pill ar-pill-action" onClick={() => setSheet('stand')}>
+            {camera.state === 'unavailable' ? 'Pick a standpoint' : 'Show markers anyway'}
+          </button>
         )}
       </div>
 

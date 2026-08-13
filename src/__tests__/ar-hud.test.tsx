@@ -161,10 +161,12 @@ describe('AR HUD — mobile-native stage (mock mode)', () => {
     const { container } = bootAt('?mock=1&tab=ar');
     await screen.findByRole('button', { name: 'AR on' });
 
-    // un-localized: a static hint pill plus a tappable one
+    // un-localized: ONE compact action chip, tucked under the top band.
+    // The camera is the content — no chrome sits over the middle of it, and
+    // the state chip up top already narrates what we are doing.
     const hints = container.querySelector('.ar-hints') as HTMLElement;
-    expect(within(hints).getByText(/pan slowly to locate|name the standpoint/)).toHaveClass('ar-pill');
-    const action = within(hints).getByRole('button', { name: /Show markers anyway/ });
+    expect(within(hints).queryByText(/pan slowly to locate|name the standpoint/)).toBeNull();
+    const action = within(hints).getByRole('button', { name: /Show markers anyway|Pick a standpoint/ });
     expect(action).toHaveClass('ar-pill', 'ar-pill-action');
 
     // its action opens the standpoint sheet — which scrolls internally
@@ -211,7 +213,7 @@ describe('AR HUD — mobile-native stage (mock mode)', () => {
     expect(screen.queryByRole('button', { name: /AHU-03/ })).not.toBeInTheDocument();
 
     const restore = await screen.findByRole('button', { name: /Restore markers \(2\)/ });
-    expect(restore).toHaveClass('ar-board-restore', 'ar-pill');
+    expect(restore).toHaveClass('ar-pill', 'ar-pill-action');
     await waitFor(() =>
       expect(localStorage.getItem('fv.mockKv.settings.board.none')).toBe('{"minimized":true}'),
     );

@@ -248,11 +248,11 @@
 }
 
 .sv-selects .ds-select-btn {
-  height: 44px;
-  min-height: 44px;
-  padding: 0 14px;
-  border-radius: var(--radius-pill);
-  font-size: 15px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
   max-width: 46vw;
 }
 
@@ -262,8 +262,6 @@
   white-space: nowrap;
 }
 
-.sv-selects .ds-select-pop { right: auto; min-width: 220px; }
-.sv-selects .ds-select-opt { font-size: 15px; padding: 11px 12px; }
 .sv-selects .link-btn { align-self: center; min-height: 44px; font-size: 15px; }
 
 /* ---------- generous typography / tap targets on the later steps ----------

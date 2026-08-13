@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import Icon from './Icon';
 
 export interface DsOption {
   value: string;
@@ -15,9 +16,34 @@ interface Props {
 }
 
 /**
- * Facilio Atom select — standing rule: never native browser controls.
- * Button + popover listbox with keyboard support (arrows/enter/escape).
+ * Facilio DSM select — never a native <select> (standing rule).
+ *
+ * Two presentations, because one does not fit both:
+ *  - TOUCH / narrow: a bottom action sheet. A floating popover attached to a
+ *    control that already sits inside a sheet has nowhere to go — it flips up,
+ *    covers the very context you are choosing for, and reads as a detached
+ *    slab. An action sheet is what a native app does, and it cannot be clipped
+ *    by any ancestor.
+ *  - POINTER / wide: an anchored popover, position:fixed so no ancestor
+ *    scroller can clip it.
  */
+function useCoarsePointer(): boolean {
+  const query = '(pointer: coarse), (max-width: 767px)';
+  const [coarse, setCoarse] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia
+      ? window.matchMedia(query).matches
+      : false,
+  );
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia(query);
+    const onChange = () => setCoarse(mq.matches);
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, []);
+  return coarse;
+}
+
 export default function DsSelect({
   label,
   value,
@@ -28,39 +54,30 @@ export default function DsSelect({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
-  // The popup is position:FIXED and measured off the trigger. Absolute
-  // positioning was being clipped by whatever scroller contained the select
-  // (sheet bodies especially), so the list escaped its panel and overlapped
-  // the screen below it.
-  const [rect, setRect] = useState<{ left: number; top: number; width: number; drop: 'down' | 'up' } | null>(null);
+  const [rect, setRect] = useState<{ left: number; top: number; width: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const listId = useId();
+  const coarse = useCoarsePointer();
+
+  const selected = options.find((o) => o.value === value);
 
   const measure = () => {
     const el = btnRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const below = window.innerHeight - r.bottom;
-    // Flip upward when there isn't room beneath (the common case for a select
-    // near the bottom of a sheet).
-    const drop: 'down' | 'up' = below < 200 && r.top > below ? 'up' : 'down';
-    setRect({
-      left: r.left,
-      top: drop === 'down' ? r.bottom + 4 : r.top - 4,
-      width: r.width,
-      drop,
-    });
+    const room = window.innerHeight - r.bottom;
+    const height = Math.min(options.length * 44 + 8, 280);
+    // Below when there is room, otherwise above — but never off-screen.
+    const top = room >= height ? r.bottom + 6 : Math.max(8, r.top - 6 - height);
+    setRect({ left: r.left, top, width: Math.max(r.width, 200) });
   };
 
-  const selected = options.find((o) => o.value === value);
-
   useEffect(() => {
-    if (!open) return;
+    if (!open || coarse) return;
     const onPointerDown = (e: PointerEvent) => {
-      const target = e.target as Node;
-      if (rootRef.current?.contains(target)) return;
-      if ((target as HTMLElement).closest?.('.ds-select-pop')) return;
+      const target = e.target as HTMLElement;
+      if (rootRef.current?.contains(target) || target.closest?.('.ds-select-pop')) return;
       setOpen(false);
     };
     const reflow = () => measure();
@@ -72,10 +89,16 @@ export default function DsSelect({
       window.removeEventListener('resize', reflow);
       window.removeEventListener('scroll', reflow, true);
     };
-  }, [open]);
+  }, [open, coarse]);
 
   useEffect(() => {
-    if (open) setActiveIndex(options.findIndex((o) => o.value === value));
+    if (!open) return;
+    setActiveIndex(options.findIndex((o) => o.value === value));
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
   }, [open, options, value]);
 
   const commit = (index: number) => {
@@ -91,15 +114,20 @@ export default function DsSelect({
       case ' ':
         e.preventDefault();
         if (open && activeIndex >= 0) commit(activeIndex);
-        else setOpen(true);
+        else {
+          measure();
+          setOpen(true);
+        }
         break;
       case 'Escape':
         setOpen(false);
         break;
       case 'ArrowDown':
         e.preventDefault();
-        if (!open) setOpen(true);
-        else setActiveIndex((i) => Math.min(i + 1, options.length - 1));
+        if (!open) {
+          measure();
+          setOpen(true);
+        } else setActiveIndex((i) => Math.min(i + 1, options.length - 1));
         break;
       case 'ArrowUp':
         e.preventDefault();
@@ -107,6 +135,24 @@ export default function DsSelect({
         break;
     }
   };
+
+  const optionRows = options.map((option, index) => (
+    <li
+      key={option.value}
+      role="option"
+      aria-selected={option.value === value}
+      className={
+        'ds-select-opt' +
+        (option.value === value ? ' selected' : '') +
+        (index === activeIndex && !coarse ? ' active' : '')
+      }
+      onPointerEnter={coarse ? undefined : () => setActiveIndex(index)}
+      onClick={() => commit(index)}
+    >
+      <span className="ds-select-opt-label">{option.label}</span>
+      {option.value === value && <Icon name="check" size={18} className="ds-select-tick" />}
+    </li>
+  ));
 
   return (
     <div className="ds-select" ref={rootRef}>
@@ -129,45 +175,33 @@ export default function DsSelect({
         <span className={selected ? 'ds-select-value' : 'ds-select-value placeholder'}>
           {selected?.label ?? placeholder}
         </span>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
-          <path d="M6 9l6 6 6-6" />
-        </svg>
+        <Icon name="chevron-down" size={16} className="ds-select-caret" />
       </button>
-      {open && (
+
+      {open && coarse && (
+        <div className="ds-sheet-root" role="dialog" aria-modal="true" aria-label={label}>
+          <button className="ds-sheet-backdrop" aria-label="Close" onClick={() => setOpen(false)} />
+          <div className="ds-sheet-panel">
+            <div className="ds-sheet-grip" aria-hidden="true" />
+            <p className="ds-sheet-title">{label}</p>
+            <ul className="ds-sheet-list scroll-y" role="listbox" id={listId} aria-label={label}>
+              {options.length === 0 && <li className="ds-select-empty">No options</li>}
+              {optionRows}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {open && !coarse && (
         <ul
-          className={rect?.drop === 'up' ? 'ds-select-pop up' : 'ds-select-pop'}
+          className="ds-select-pop"
           role="listbox"
           id={listId}
           aria-label={label}
-          style={
-            rect
-              ? {
-                  left: rect.left,
-                  width: rect.width,
-                  ...(rect.drop === 'down'
-                    ? { top: rect.top }
-                    : { bottom: window.innerHeight - rect.top }),
-                }
-              : undefined
-          }
+          style={rect ? { left: rect.left, top: rect.top, width: rect.width } : undefined}
         >
           {options.length === 0 && <li className="ds-select-empty">No options</li>}
-          {options.map((option, index) => (
-            <li
-              key={option.value}
-              role="option"
-              aria-selected={option.value === value}
-              className={
-                'ds-select-opt' +
-                (option.value === value ? ' selected' : '') +
-                (index === activeIndex ? ' active' : '')
-              }
-              onPointerEnter={() => setActiveIndex(index)}
-              onClick={() => commit(index)}
-            >
-              {option.label}
-            </li>
-          ))}
+          {optionRows}
         </ul>
       )}
     </div>

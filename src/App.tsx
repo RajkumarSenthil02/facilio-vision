@@ -5,7 +5,6 @@ import { detectEmbed } from './shell/embed';
 import { installGlobalErrorHandlers, onGlobalError } from './shell/globalErrors';
 import { createAppQueryClient, purgeLegacyPersistedCache } from './api/queryClient';
 import { onQueueChange, flushQueue } from './api/offlineQueue';
-import { onAppStoreStatus } from './api/appStore';
 import { isMockMode } from './api/provider';
 import { LocationProvider } from './state/LocationContext';
 import {
@@ -55,7 +54,6 @@ const SCREENS: ShellScreen[] = [
 export default function App() {
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [pendingWrites, setPendingWrites] = useState(0);
-  const [storeDown, setStoreDown] = useState<string | null>(null);
   const embed = detectEmbed();
 
   const queryClient = useMemo(createAppQueryClient, []);
@@ -64,7 +62,6 @@ export default function App() {
 
   useEffect(() => onGlobalError(setGlobalError), []);
   useEffect(() => onQueueChange(setPendingWrites), []);
-  useEffect(() => onAppStoreStatus(setStoreDown), []);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -93,11 +90,6 @@ export default function App() {
             >
               Use live data
             </button>
-          </div>
-        )}
-        {storeDown && (
-          <div className="notice-banner" role="status">
-            <span>{storeDown}</span>
           </div>
         )}
         {pendingWrites > 0 && (

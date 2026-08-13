@@ -50,7 +50,8 @@ const SCREENS: ShellScreen[] = [
   { id: 'rounds', label: 'Rounds', icon: <RouteIcon />, visible: false, component: RoundsScreen },
   { id: 'settings', label: 'Settings', icon: <SettingsIcon />, visible: false, component: SettingsScreen },
   { id: 'diagnostics', label: 'Diagnostics', icon: <ClipboardListIcon />, visible: false, component: DiagnosticsScreen },
-  { id: 'boom', label: 'Boom', visible: false, component: BoomScreen },
+  // Deliberate crash screen for the error-boundary test — ?tab=boom only.
+  { id: 'boom', label: 'Boom', visible: false, devOnly: true, component: BoomScreen },
 ];
 
 export default function App() {

@@ -7,14 +7,43 @@
 /* ---- desktop admin frame: 56px topbar + 240px sidebar + main on --bg-app ---- */
 
 .as-desktop {
+  /* FILL the app frame. This had no height at all, so the grid sized to its
+     content and left a dead band below it on tall screens (iPad). */
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: var(--sidebar-w, 240px) 1fr;
   grid-template-rows: 56px 1fr;
   grid-template-areas:
     'topbar topbar'
     'sidebar main';
   background: var(--bg-app);
+  transition: grid-template-columns var(--dur-base) var(--ease-standard);
 }
+
+/* Collapsed: icons only, labels gone, tooltips carry the name. */
+.as-desktop.collapsed { --sidebar-w: 68px; }
+.as-desktop.collapsed .nav-item { justify-content: center; padding: 9px 0; }
+.as-desktop.collapsed .nav-item span,
+.as-desktop.collapsed .nav-section,
+.as-desktop.collapsed .as-logo-sub { display: none; }
+.as-desktop.collapsed .as-logo-word { font-size: 15px; }
+
+.as-collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-right: 10px;
+  border: 1px solid var(--ink-200);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--ink-600);
+  cursor: pointer;
+}
+
+.as-collapse:hover { background: var(--ink-050); color: var(--ink-900); }
 
 .as-topbar {
   grid-area: topbar;
@@ -49,6 +78,8 @@
 }
 
 .as-sidebar {
+  overflow-y: auto;
+  overflow-x: hidden;
   grid-area: sidebar;
   background: var(--bg-surface);
   border-right: 1px solid var(--ink-200);

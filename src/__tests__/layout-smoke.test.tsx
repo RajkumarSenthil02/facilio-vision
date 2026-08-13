@@ -14,6 +14,7 @@ const SCREENS: ShellScreen[] = [
   { id: 'rooms', label: 'Rooms', visible: true, icon: <LayoutGridIcon />, component: () => <h2>Rooms screen</h2> },
   { id: 'dashboard', label: 'Dashboard', visible: false, component: () => <h2>Dashboard screen</h2> },
   { id: 'settings', label: 'Settings', visible: false, component: () => <h2>Settings screen</h2> },
+  { id: 'devtest', label: 'Dev test', visible: false, devOnly: true, component: () => <h2>Dev test</h2> },
 ];
 
 const realMatchMedia = window.matchMedia;
@@ -160,5 +161,33 @@ describe('AppShell navigation semantics', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
     consoleError.mockRestore();
+  });
+
+  it('the desktop grid FILLS the frame and the sidebar collapses', async () => {
+    const user = userEvent.setup();
+    setViewport(true); // desktop
+    const { container } = bootAt('?tab=capture');
+
+    const grid = container.querySelector('.as-desktop') as HTMLElement;
+    expect(grid).not.toBeNull();
+    // it must not be collapsed by default...
+    expect(grid.className).not.toMatch(/collapsed/);
+
+    await user.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+    expect(container.querySelector('.as-desktop')?.className).toMatch(/collapsed/);
+    // labels are hidden by CSS, so the accessible name must survive on the button
+    expect(screen.getByRole('tab', { name: 'Dashboard' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Expand sidebar' }));
+    expect(container.querySelector('.as-desktop')?.className).not.toMatch(/collapsed/);
+  });
+
+  it('dev-only screens never appear in navigation', () => {
+    setViewport(true);
+    bootAt('?tab=capture');
+    // reachable by ?tab= for the error-boundary test, but never listed
+    expect(screen.queryByRole('tab', { name: 'Dev test' })).toBeNull();
+    // ...while ordinary hidden screens still surface under Admin
+    expect(screen.getByRole('tab', { name: 'Settings' })).toBeInTheDocument();
   });
 });

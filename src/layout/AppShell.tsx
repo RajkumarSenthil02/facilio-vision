@@ -28,6 +28,8 @@ export interface ShellScreen {
   visible: boolean;
   /** Camera-first screens own the pane: no internal scroll, full bleed. */
   bleed?: boolean;
+  /** Reachable by ?tab= for testing, but never listed in any navigation. */
+  devOnly?: boolean;
   component: ComponentType;
 }
 
@@ -58,7 +60,25 @@ function desktopNow(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia(DESKTOP_QUERY).matches;
 }
 
+const COLLAPSE_KEY = 'fv.sidebarCollapsed';
+
 export default function AppShell({ screens, initialTab }: AppShellProps) {
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(COLLAPSE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0');
+    } catch {
+      /* storage can be blocked in a third-party iframe */
+    }
+  }, [collapsed]);
+
   const [active, setActive] = useState(() => tabFromLocation(screens, initialTab));
   const [desktop, setDesktop] = useState(desktopNow);
   const embedded = detectEmbed().embedded;
@@ -95,7 +115,7 @@ export default function AppShell({ screens, initialTab }: AppShellProps) {
   // Mobile/embedded nav: visible screens, plus the active one if hidden.
   const joinNav = screens.filter((s) => s.visible || s.id === activeScreen.id);
   const visibleScreens = screens.filter((s) => s.visible);
-  const hiddenScreens = screens.filter((s) => !s.visible);
+  const hiddenScreens = screens.filter((s) => !s.visible && !s.devOnly);
 
   // key resets the boundary when the tab changes, so one crashed screen
   // never poisons the next one the user switches to
@@ -132,6 +152,10 @@ export default function AppShell({ screens, initialTab }: AppShellProps) {
       role="tab"
       aria-selected={screen.id === activeScreen.id}
       className={screen.id === activeScreen.id ? 'nav-item active' : 'nav-item'}
+      // The label is hidden when collapsed, so it has to survive as the
+      // accessible name and the tooltip.
+      aria-label={screen.label}
+      title={screen.label}
       onClick={() => select(screen.id)}
     >
       {screen.icon}
@@ -141,8 +165,20 @@ export default function AppShell({ screens, initialTab }: AppShellProps) {
 
   if (desktop) {
     return (
-      <div className="as-desktop">
+      <div className={collapsed ? 'as-desktop collapsed' : 'as-desktop'}>
         <header className="as-topbar">
+          <button
+            className="as-collapse"
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!collapsed}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            onClick={() => setCollapsed((c) => !c)}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <path d="M9 4v16" />
+            </svg>
+          </button>
           <div className="as-logo">
             <span className="as-logo-word">Facilio</span>
             <span className="as-logo-sub">Vision</span>

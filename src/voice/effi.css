@@ -8,13 +8,6 @@
    Anatomy still follows the design file (status row, live words, waveform,
    reply-as-card, toast); wordmark colours carry the identity. */
 
-@property --ef-angle {
-  syntax: '<angle>';
-  initial-value: 0deg;
-  inherits: false;
-}
-@keyframes efAngle { to { --ef-angle: 360deg; } }
-@keyframes efHue { to { filter: blur(7px) saturate(170%) hue-rotate(360deg); } }
 
 @keyframes efSpin { to { transform: rotate(360deg); } }
 @keyframes efRipple { 0% { opacity: 0.5; transform: scale(0.85); } 100% { opacity: 0; transform: scale(1.9); } }
@@ -31,8 +24,8 @@
 /* ---- the orb ---- */
 .ef-orb-slot {
   position: absolute;
-  right: 22px;
-  bottom: 172px;
+  right: 18px;
+  bottom: 128px;
   z-index: 14;
   display: flex;
   flex-direction: column;
@@ -102,42 +95,6 @@
   pointer-events: none;
 }
 .ef-core svg { position: relative; z-index: 1; filter: drop-shadow(0 1px 4px rgba(11, 18, 32, 0.5)); }
-
-/* ---- Apple-Intelligence edge glow: the screen perimeter carries the
-   listening/thinking state, hugging the display curvature ---- */
-.ef-edge {
-  position: absolute;
-  inset: 0;
-  z-index: 17;
-  pointer-events: none;
-  border-radius: 24px;
-  animation: efFade 240ms cubic-bezier(0.2, 0, 0, 1) both;
-}
-.ef-edge::before,
-.ef-edge::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: conic-gradient(
-    from var(--ef-angle),
-    #2ed1ff, #0059d6, #3c229d, #ff3b7f, #ffd60a, #2ed1ff
-  );
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  animation: efAngle 4s linear infinite, efHue 8s linear infinite;
-}
-.ef-edge::before {
-  padding: 3px;
-  filter: blur(7px) saturate(170%);
-}
-.ef-edge::after {
-  padding: 16px;
-  filter: blur(26px) saturate(170%);
-  opacity: 0.45;
-}
 
 /* ---- dim + panel ---- */
 .ef-dim {
@@ -217,6 +174,29 @@
   color: #2ed1ff;
   animation: efCaret 900ms steps(1) infinite;
 }
+
+/* ---- visual-intelligence menu ---- */
+.ef-menu { display: flex; flex-direction: column; gap: 12px; }
+.ef-menu-lead { margin: 0; color: rgba(255, 255, 255, 0.72); font-size: 14px; line-height: 20px; }
+.ef-vi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ef-vi {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 48px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 14px;
+  color: rgba(255, 255, 255, 0.96);
+  font: 600 13px/1.2 var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+.ef-vi:active { background: rgba(255, 255, 255, 0.2); }
+.ef-vi svg { flex: none; color: #9be0ff; }
+.ef-vi-ask { background: rgba(0, 89, 214, 0.55); }
+.ef-vi-ask svg { color: #fff; }
 
 /* ---- waveform ---- */
 .ef-wave { display: flex; align-items: center; gap: 5px; height: 34px; }

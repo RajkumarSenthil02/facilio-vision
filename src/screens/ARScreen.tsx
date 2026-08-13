@@ -1285,6 +1285,28 @@ Aim captured — lower the phone to type, the pin stays where you pointed.
             if (verb === 'clear') setGuide(null);
             if (verb === 'tasks') setSheet(null);
           }}
+          onShowAsset={(assetId) => setFocusAssetId(assetId)}
+          onPinFinding={async (text) => {
+            // same anchoring rules as "Pin here": a finding is a marker, and
+            // markers need a standpoint and a live aim
+            if (!activeSurvey) {
+              throw new Error('Stand at a standpoint first — a finding pins to a survey.');
+            }
+            const aim = placementOrientation();
+            if (!aim) {
+              throw new Error('No orientation yet — allow Motion & Orientation Access, then retry.');
+            }
+            const base = activeSurvey.sweep[0]?.heading ?? 0;
+            const delta = presence?.delta ?? 0;
+            await addMarkerToSurvey({
+              id: newMarkerId(),
+              label: `Finding: ${text}`.slice(0, 60),
+              note: text,
+              heading: ((aim.heading - delta - base) % 360 + 360) % 360,
+              pitch: aim.pitch,
+            });
+            return `Finding pinned right where you're aiming — ${text}`;
+          }}
         />
       )}
 

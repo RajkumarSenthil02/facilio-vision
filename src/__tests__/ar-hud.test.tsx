@@ -292,9 +292,18 @@ describe('Effi — the AR voice agent (design: Vision AR Voice Agent)', () => {
     expect(orb).toHaveClass('ef-orb');
     expect(screen.getByText('Tap to talk')).toBeInTheDocument();
 
-    // tap → the panel rises (jsdom has no speech engine → typed fallback)
+    // tap → the VISUAL INTELLIGENCE menu rises: act on what the camera sees
     await user.click(orb);
     const panel = await screen.findByRole('region', { name: 'Effi voice agent' });
+    expect(within(panel).getByText('Visual intelligence')).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /Create work order/ })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /Record a finding/ })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /Find the asset/ })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /Read nameplate/ })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /Directions/ })).toBeInTheDocument();
+
+    // Ask anything → the listening surface (jsdom → typed fallback)
+    await user.click(within(panel).getByRole('button', { name: /Ask anything/ }));
     expect(within(panel).getByText('Listening')).toBeInTheDocument();
 
     // a local intent answers in the panel, not a toast of prose elsewhere

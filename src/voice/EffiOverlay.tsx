@@ -33,10 +33,16 @@ import {
   type FaultResult,
 } from './reportFault';
 import { useVoice } from './useVoice';
+import { draftWorkOrder, readNameplate } from '../api/agents';
+import { appStore } from '../api/appStore';
+import Icon from '../components/Icon';
 import type { Asset, WorkOrderStatus } from '../api/types';
 import './effi.css';
 
-type Phase = 'idle' | 'listening' | 'thinking' | 'reply';
+/** Visual-intelligence actions: act on what the CAMERA sees. */
+type VisualAction = 'workorder' | 'finding' | 'identify' | 'nameplate' | 'directions';
+
+type Phase = 'idle' | 'menu' | 'listening' | 'thinking' | 'reply';
 
 const UI_CONFIRMATION: Record<VoiceUiVerb, string> = {
   rescan: 'Rescanning.',
@@ -79,6 +85,8 @@ export default function EffiOverlay({
   onUiAction,
   woUrl,
   hideOrb,
+  onPinFinding,
+  onShowAsset,
 }: {
   open: boolean;
   onOpenChange(open: boolean): void;
@@ -91,6 +99,11 @@ export default function EffiOverlay({
   woUrl?: (id: number) => string | null;
   /** An open AR window owns that corner — the idle orb yields to it. */
   hideOrb?: boolean;
+  /** Pin a FINDING at the current aim (AR screen owns markers). Resolves to
+   * a confirmation line; rejects with guidance when not localized. */
+  onPinFinding?: (text: string) => Promise<string>;
+  /** Focus an asset window in AR (identify lane hands off to the HUD). */
+  onShowAsset?: (assetId: number) => void;
 }) {
   const { scope, names } = useLocationScope();
   const [phase, setPhase] = useState<Phase>('idle');
@@ -285,6 +298,90 @@ export default function EffiOverlay({
     }
   };
 
+  /** One visual-intelligence action: SNAP the frame, run the lane, reply as
+   * a card. Every lane degrades to guidance, never to a dead end. */
+  const runVisual = useCallback(
+    async (action: VisualAction) => {
+      if (action === 'directions') {
+        // directions are conversational — the loop has find/navigate tools
+        startListening();
+        setHeard('');
+        setReply('');
+        return;
+      }
+      if (action === 'identify') {
+        // the HUD's recognition loop IS the identifier — hand off to it
+        if (assetInView) {
+          onShowAsset?.(assetInView.id);
+          answerWith(`That's ${assetInView.name} — opening it in AR.`);
+          onOpenChange(false);
+          setPhase('idle');
+        } else {
+          answerWith(
+            'Point the camera straight at the asset and hold — the moment I recognise it, its window opens on screen.',
+          );
+        }
+        return;
+      }
+
+      busyRef.current = true;
+      setPhase('thinking');
+      try {
+        const photo = captureFrame ? await captureFrame() : null;
+        if (!photo) {
+          answerWith('I could not grab a frame — is the camera running?');
+          return;
+        }
+
+        if (action === 'workorder') {
+          busyRef.current = false;
+          await analyze(photo); // existing photo→draft→create lane
+          return;
+        }
+
+        if (action === 'nameplate') {
+          setThinkText('Reading the nameplate…');
+          const fileId = await appStore.uploadPhoto(photo, `effi-plate-${Date.now()}.jpg`);
+          const plate = await readNameplate(fileId);
+          const fields: Array<[string, string]> = [];
+          for (const [label, value] of [
+            ['Manufacturer', plate.manufacturer],
+            ['Model', plate.model],
+            ['Serial', plate.serial],
+          ] as const) {
+            if (value && value !== 'none') fields.push([label, value]);
+          }
+          if (fields.length === 0) {
+            answerWith('I could not read a nameplate in this frame — get closer and square-on.');
+          } else {
+            answerWith('Here is what the nameplate says.', { title: 'Nameplate', fields });
+          }
+          return;
+        }
+
+        // finding: AI drafts what it sees, the AR screen pins it at the aim
+        setThinkText('Describing what I see…');
+        const fileId = await appStore.uploadPhoto(photo, `effi-find-${Date.now()}.jpg`);
+        const draft = await draftWorkOrder(
+          fileId,
+          `Field finding${assetInView ? ` near ${assetInView.name}` : ''}${names.site ? ` at ${names.site}` : ''} — describe the observation, no job needed yet`,
+        );
+        if (!onPinFinding) {
+          answerWith(`Finding noted: ${draft.subject}`);
+          return;
+        }
+        setThinkText('Pinning the finding here…');
+        const confirmation = await onPinFinding(draft.subject);
+        answerWith(confirmation, { title: 'Finding', fields: [['Observation', draft.subject]] }, 'Finding pinned');
+      } catch (err) {
+        answerWith(err instanceof Error ? err.message : 'That failed — try again.');
+      } finally {
+        busyRef.current = false;
+      }
+    },
+    [assetInView, names.site, captureFrame, analyze, answerWith, onPinFinding, onShowAsset, onOpenChange],
+  );
+
   const close = () => {
     if (voice.listening) voice.toggle();
     setPhase('idle');
@@ -293,7 +390,7 @@ export default function EffiOverlay({
 
   // the surface (rail button / window action) asked for Effi
   useEffect(() => {
-    if (open && phase === 'idle') startListening();
+    if (open && phase === 'idle') setPhase('menu');
     if (!open && phase !== 'idle') {
       setPhase('idle');
     }
@@ -322,15 +419,12 @@ export default function EffiOverlay({
             type="button"
             className="ef-orb"
             aria-label="Talk to Effi"
-            onClick={() => {
-              onOpenChange(true);
-              startListening();
-            }}
+            onClick={() => onOpenChange(true)}
           >
             <span className="ef-core" aria-hidden="true">
               <span className="ef-swirl" />
               <span className="ef-specular" />
-              <FacilioMark size={16} />
+              <Icon name="sparkle" size={26} />
             </span>
           </button>
         </div>
@@ -338,9 +432,6 @@ export default function EffiOverlay({
 
       {phase !== 'idle' && (
         <>
-          {(phase === 'listening' || phase === 'thinking') && (
-            <div className="ef-edge" aria-hidden="true" />
-          )}
           <div className="ef-dim" onClick={close} />
           <section className="ef-panel" aria-label="Effi voice agent">
             <div className="ef-status">
@@ -349,10 +440,22 @@ export default function EffiOverlay({
                   className="ef-status-dot"
                   style={{
                     background:
-                      phase === 'listening' ? '#2ED1FF' : phase === 'thinking' ? '#FFD405' : '#29A01E',
+                      phase === 'listening'
+                        ? '#2ED1FF'
+                        : phase === 'thinking'
+                          ? '#FFD405'
+                          : phase === 'menu'
+                            ? '#7D63DC'
+                            : '#29A01E',
                   }}
                 />
-                {phase === 'listening' ? 'Listening' : phase === 'thinking' ? 'Working on it' : 'Effi'}
+                {phase === 'listening'
+                  ? 'Listening'
+                  : phase === 'thinking'
+                    ? 'Working on it'
+                    : phase === 'menu'
+                      ? 'Visual intelligence'
+                      : 'Effi'}
               </span>
               <button type="button" className="ef-x" aria-label="Close Effi" onClick={close}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
@@ -361,6 +464,41 @@ export default function EffiOverlay({
               </button>
             </div>
 
+            {phase === 'menu' && (
+              <div className="ef-menu">
+                <p className="ef-menu-lead">
+                  What do you see?{assetInView ? ` Looking at ${assetInView.name}.` : ''}
+                </p>
+                <div className="ef-vi-grid">
+                  <button type="button" className="ef-vi" onClick={() => void runVisual('workorder')}>
+                    <Icon name="list" size={20} />
+                    Create work order
+                  </button>
+                  <button type="button" className="ef-vi" onClick={() => void runVisual('finding')}>
+                    <Icon name="note" size={20} />
+                    Record a finding
+                  </button>
+                  <button type="button" className="ef-vi" onClick={() => void runVisual('identify')}>
+                    <Icon name="search" size={20} />
+                    Find the asset
+                  </button>
+                  <button type="button" className="ef-vi" onClick={() => void runVisual('nameplate')}>
+                    <Icon name="qr" size={20} />
+                    Read nameplate
+                  </button>
+                  <button type="button" className="ef-vi" onClick={() => void runVisual('directions')}>
+                    <Icon name="route" size={20} />
+                    Directions
+                  </button>
+                  <button type="button" className="ef-vi ef-vi-ask" onClick={startListening}>
+                    <Icon name="mic" size={20} />
+                    Ask anything
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {phase !== 'menu' && (
             <p className="ef-heard">
               {heard}
               {pendingWords && <span className="ef-pending"> {pendingWords}</span>}
@@ -371,6 +509,7 @@ export default function EffiOverlay({
                 </span>
               )}
             </p>
+            )}
 
             {phase === 'listening' && voice.supported && (
               <div className="ef-wave" aria-hidden="true">
@@ -473,6 +612,9 @@ export default function EffiOverlay({
                 )}
 
                 <div className="ef-suggest">
+                  <button type="button" className="ef-chip" onClick={() => setPhase('menu')}>
+                    Actions
+                  </button>
                   <button type="button" className="ef-chip" onClick={startListening}>
                     Ask again
                   </button>

@@ -11,7 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { appStore } from '../api/appStore';
 import { useAssetSearch } from '../api/hooks';
 import { isMockMode } from '../api/provider';
-import type { Asset, CodeEntry, Survey, SurveyMarker, SweepFrame } from '../api/types';
+import type { Asset, Survey, SurveyMarker, SweepFrame } from '../api/types';
 import { getEmbedFn, syntheticVec, EMBED_MODEL_ID } from '../ar/embedding';
 import { ArCard, ArSpace } from '../ar/ArSpace';
 import { AssetTag, NoteTag } from '../ar/markers';
@@ -20,9 +20,7 @@ import LocationPicker from '../components/LocationPicker';
 import Sheet from '../components/Sheet';
 import { CameraView } from '../components/camera/CameraView';
 import { useCamera } from '../components/camera/useCamera';
-import { getCodeEntry, linkCode, unlinkCode } from '../vision/codes';
-import { useScanLoop } from '../vision/scanLoop';
-import { normalizeCode } from '../vision/qr';
+import { linkCode } from '../vision/codes';
 import { useGeoFix } from '../hooks/useGeoFix';
 import { arOrientation, enableArOrientation, useHeading } from '../hooks/useHeading';
 import { wrap } from '../wayfinding/bearing';
@@ -38,14 +36,22 @@ export function setSweepFrameSource(fn: (() => CanvasImageSource | null) | null)
 }
 
 const MAX_FRAMES = 12;
-/** ≥8 frames required live; 4 are enough in mock (no sensors to sweep with). */
-function minFrames(): number {
-  return isMockMode() ? 4 : 8;
-}
+// There is no minimum frame gate any more: the sweep is a by-product of
+// placing markers, so a survey saves with whatever it captured. Fewer frames
+// only means visual relocalization is weaker — the standpoint QR still works.
 /** Auto-capture cadence: one frame every ~30° of heading change. */
 const CAPTURE_STEP_DEG = 28;
 
-type Step = 'setup' | 'sweep' | 'qr' | 'markers';
+/**
+ * Two steps, not four.
+ *
+ * It was Setup -> Sweep -> Standpoint QR -> Markers, each gating the next. But
+ * you turn on the spot to place markers anyway, so the sweep now captures
+ * itself while you do that; and QR enrolment already lives in the survey
+ * detail sheet, which mints and prints codes. What is left is the actual job:
+ * name it, then place markers.
+ */
+type Step = 'setup' | 'markers';
 
 interface MarkerDraft {
   rel: number;
@@ -71,10 +77,9 @@ export default function PlaceAssetsScreen({
   const [name, setName] = useState('');
   const [frames, setFrames] = useState<SweepFrame[]>([]);
   const [markers, setMarkers] = useState<SurveyMarker[]>([]);
-  const [qrCode, setQrCode] = useState<string | null>(null);
-  const [qrHeading, setQrHeading] = useState<number | undefined>(undefined);
-  const [codeInput, setCodeInput] = useState('');
-  const [conflict, setConflict] = useState<{ code: string; entry: CodeEntry } | null>(null);
+  // QR enrolment moved to the survey detail sheet; a new survey saves without one.
+  const qrCode: string | null = null;
+  const qrHeading: number | undefined = undefined;
   const [hint, setHint] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // Mock stand-in for the device heading: rotated by explicit buttons.
@@ -109,6 +114,13 @@ export default function PlaceAssetsScreen({
     return o.ok ? o.pitch : 0;
   };
 
+  // Own the whole viewport while authoring — the dock must not cover the
+  // action bar (it did, and Save was untappable).
+  useEffect(() => {
+    document.body.classList.add('pa-open');
+    return () => document.body.classList.remove('pa-open');
+  }, []);
+
   const captureFrame = async (heading: number, pitch: number) => {
     if (busyRef.current) return;
     busyRef.current = true;
@@ -125,7 +137,7 @@ export default function PlaceAssetsScreen({
 
   // Live guided sweep: auto-capture a frame every ~30° of heading change.
   useEffect(() => {
-    if (step !== 'sweep' || mock) return;
+    if (step !== 'markers' || mock) return;
     if (!pose.ok || frames.length >= MAX_FRAMES) return;
     const last = frames[frames.length - 1];
     if (!last || Math.abs(wrap(pose.heading - last.heading)) >= CAPTURE_STEP_DEG) {
@@ -134,59 +146,6 @@ export default function PlaceAssetsScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, mock, pose, frames]);
 
-  const sweepDone = frames.length >= minFrames();
-
-  // Standpoint step: a sticker held up to the camera enrolls itself.
-  const scan = useScanLoop({ camera, siteId: scope.siteId, enabled: step === 'qr' });
-  const lastScanAt = useRef(0);
-  useEffect(() => {
-    if (step !== 'qr' || !scan.qrHit || scan.qrHit.at === lastScanAt.current) return;
-    lastScanAt.current = scan.qrHit.at;
-    setCodeInput(scan.qrHit.code);
-    void enrollCode(scan.qrHit.code);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scan.qrHit, step]);
-
-  const enrollCode = async (raw: string) => {
-    const code = normalizeCode(raw);
-    if (!code) return;
-    // A code identifies exactly ONE thing — check the app-wide registry
-    // (src/vision/codes, same keys the scanner reads) and never guess when it
-    // already points elsewhere.
-    const entry = await getCodeEntry(code);
-    if (entry) {
-      setConflict({ code, entry });
-      return;
-    }
-    acceptCode(code);
-  };
-
-  const acceptCode = (code: string) => {
-    setQrCode(code);
-    // The device heading while FACING the QR — scanning it later gives Δ instantly.
-    const o = arOrientation();
-    setQrHeading(mock ? mockHeading : o.ok ? o.heading : undefined);
-    setConflict(null);
-    setHint(`Code ${code} will be this survey's standpoint`);
-  };
-
-  /** Conflict resolution: relink the code here, unlinking the other survey. */
-  const relinkConflict = async () => {
-    if (!conflict) return;
-    const { code, entry } = conflict;
-    if (entry.type === 'survey' && entry.surveyId) {
-      const other = await appStore.kvGet<Survey>('surveys', `survey.${entry.surveyId}`);
-      if (other?.qrCode === code) {
-        await appStore.kvPut('surveys', `survey.${entry.surveyId}`, {
-          ...other,
-          qrCode: undefined,
-          qrHeading: undefined,
-        });
-      }
-    }
-    await unlinkCode(code);
-    acceptCode(code);
-  };
 
   const placeMarkerHere = () => {
     // Direction FROZEN AT THE MOMENT OF THE TAP so the phone can be lowered
@@ -247,8 +206,7 @@ export default function PlaceAssetsScreen({
   };
 
   const sweepBase = frames[0]?.heading ?? 0;
-  const stepLabel =
-    step === 'setup' ? '1 · Setup' : step === 'sweep' ? '2 · Sweep' : step === 'qr' ? '3 · Standpoint QR' : '4 · Markers';
+  const stepLabel = step === 'setup' ? 'Name it' : `${markers.length} placed`;
 
   return (
     <div className="pa-stage" role="dialog" aria-label="Place assets — AR survey">
@@ -298,109 +256,17 @@ export default function PlaceAssetsScreen({
                 disabled={!name.trim()}
                 onClick={() => {
                   void enableArOrientation(); // iOS gate — this click is the user gesture
-                  setStep('sweep');
+                  setStep('markers');
                 }}
               >
-                Start 360° sweep
+                Start placing
               </button>
               <p className="sv-help">
-                Stand where a technician would stand and turn slowly on the spot — a frame is
-                captured about every 30°, and every marker you pin later is stored relative to
-                the first one.
+                Stand where a technician would stand, then turn on the spot and tap each asset
+                they should see. The room fingerprints itself as you go.
               </p>
             </Sheet>
           </>
-        )}
-
-        {step === 'sweep' && (
-          <>
-            <div className="pa-sheet">
-              <h3>Guided sweep</h3>
-              <div className="pa-progress">
-                <div className="bar">
-                  <span style={{ width: `${Math.min(100, (frames.length / minFrames()) * 100)}%` }} />
-                </div>
-                <span className="n">
-                  {frames.length}/{minFrames()}+
-                </span>
-              </div>
-              <p className="muted small">
-                Turn slowly on the spot — a frame is captured about every 30° of heading change
-                (up to {MAX_FRAMES}). Markers will be stored relative to the first frame.
-              </p>
-              {mock && (
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    void captureFrame(mockHeading, 0);
-                    setMockHeading((h) => (h + 30) % 360);
-                  }}
-                >
-                  Capture frame (mock)
-                </button>
-              )}
-              <button className="btn btn-primary" disabled={!sweepDone} onClick={() => setStep('qr')}>
-                Continue
-              </button>
-            </div>
-            {!mock && !pose.ok && (
-              <p className="pa-hint" style={{ position: 'absolute', bottom: 12, left: 0, right: 0 }}>
-                Waiting for the compass — if nothing happens, re-tap Start sweep to grant motion access.
-              </p>
-            )}
-          </>
-        )}
-
-        {step === 'qr' && (
-          <div className="pa-sheet">
-            <h3>Standpoint QR (optional)</h3>
-            <p className="muted small">
-              Stick a label at this spot and enroll it while FACING it — scanning it later opens
-              this survey instantly with an exact heading correction. Hold the label up to the
-              camera, or type its code.
-            </p>
-            <div className="ar-code-row">
-              <input
-                value={codeInput}
-                onChange={(e) => setCodeInput(e.target.value)}
-                placeholder="Code on the label"
-                aria-label="Standpoint code"
-              />
-              <button className="btn btn-secondary" onClick={() => void enrollCode(codeInput)}>
-                Enroll
-              </button>
-            </div>
-            {qrCode && (
-              <p className="muted small">
-                Enrolled: <strong>{qrCode}</strong>
-                {qrHeading != null ? ` (facing ${Math.round(qrHeading)}°)` : ''}
-              </p>
-            )}
-            {conflict && (
-              <div className="kit-card" role="alertdialog" aria-label="Code conflict">
-                <div className="kit-card-bd">
-                  <p className="small">
-                    <strong>{conflict.code}</strong> already identifies{' '}
-                    {conflict.entry.type === 'survey'
-                      ? 'another survey standpoint'
-                      : `a ${conflict.entry.type}`}
-                    . A code must point at exactly one thing.
-                  </p>
-                  <div className="row">
-                    <button className="btn btn-secondary" onClick={() => void relinkConflict()}>
-                      Relink it here
-                    </button>
-                    <button className="btn btn-secondary" onClick={() => setConflict(null)}>
-                      Use a different code
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-            <button className="btn btn-primary" onClick={() => setStep('markers')}>
-              {qrCode ? 'Continue' : 'Skip'}
-            </button>
-          </div>
         )}
 
         {step === 'markers' && (

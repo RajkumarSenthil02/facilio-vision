@@ -177,7 +177,7 @@ describe('survey detail — bottom sheet', () => {
 });
 
 describe('new survey point — camera + sheet', () => {
-  it('opens the authoring overlay with a live camera slot, an exit pill and the sweep CTA', async () => {
+  it('opens the authoring overlay with a live camera slot, an exit pill and a single Start CTA', async () => {
     const user = userEvent.setup();
     const { container } = renderScreen(<SurveysScreen />);
 
@@ -200,7 +200,7 @@ describe('new survey point — camera + sheet', () => {
     expect(container.querySelector('select')).toBeNull();
     expect(container.querySelectorAll('.sv-selects .ds-select-btn').length).toBeGreaterThanOrEqual(3);
 
-    const start = screen.getByRole('button', { name: 'Start 360° sweep' });
+    const start = screen.getByRole('button', { name: 'Start placing' });
     expect(start).toHaveClass('btn-cta');
     expect(start).toBeDisabled(); // needs a name first
     await user.type(input, 'AHU room — door side');

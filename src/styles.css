@@ -221,6 +221,10 @@ button:hover { border-color: var(--muted); }
   white-space: nowrap;
 }
 
+/* A full-screen authoring takeover hides the app dock; otherwise the dock
+   paints over the overlay's own action bar and its buttons are unreachable. */
+body.pa-open .as-dock { display: none; }
+
 .notice-banner {
   display: flex;
   align-items: center;

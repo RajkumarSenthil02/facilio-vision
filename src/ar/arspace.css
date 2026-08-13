@@ -238,9 +238,13 @@ button.ar-pill { cursor: pointer; }
 /* ---------- Place-Assets full-screen overlay ---------- */
 
 .pa-stage {
+  /* A full-screen takeover: it owns the viewport, and the app dock is hidden
+     while it is open (see body.pa-open). Previously this box spanned the whole
+     viewport while the dock still painted over its footer — so the Save and
+     Place-marker buttons sat UNDER the dock and could not be tapped at all. */
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 200;
   display: flex;
   flex-direction: column;
   background: var(--hud-bg, #0b1220);
@@ -266,7 +270,8 @@ button.ar-pill { cursor: pointer; }
 .pa-foot {
   display: flex;
   gap: 8px;
-  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  flex: none;
+  padding: 10px 12px calc(10px + var(--safe-b));
   background: rgba(16, 24, 38, 0.9);
   border-top: 1px solid rgba(255, 255, 255, 0.14);
 }

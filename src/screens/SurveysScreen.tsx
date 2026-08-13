@@ -126,7 +126,7 @@ export default function SurveysScreen() {
         )}
       </div>
 
-      <Sheet open={scopeOpen} title="Where are you working?" onClose={() => setScopeOpen(false)}>
+      <Sheet open={scopeOpen} title="Where are you working?" onClose={() => setScopeOpen(false)} size="tall">
         <div className="sv-selects">
           <LocationPicker />
         </div>

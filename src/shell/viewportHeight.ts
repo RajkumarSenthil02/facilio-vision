@@ -24,10 +24,16 @@ export function installViewportHeight(): void {
 
   const apply = () => {
     const vv = window.visualViewport;
-    const h = vv?.height ?? window.innerHeight;
+    const vvH = vv?.height ?? window.innerHeight;
+    // A height gap only means "keyboard" while something editable is focused.
+    // Without that, a smaller visual viewport is STALE data — iOS collapses
+    // the Safari toolbar without firing resize for fixed layouts, which left
+    // the dock floating above a dead band. Trust the larger measurement then.
+    const editing = !!document.activeElement?.matches?.('input, textarea, [contenteditable]');
+    const keyboard = editing && window.innerHeight - vvH > KEYBOARD_MIN_PX;
+    const h = keyboard ? vvH : Math.max(vvH, window.innerHeight);
     if (h > 0) document.documentElement.style.setProperty('--app-h', `${Math.round(h)}px`);
     document.documentElement.style.setProperty('--vv-top', `${Math.round(vv?.offsetTop ?? 0)}px`);
-    const keyboard = window.innerHeight - h > KEYBOARD_MIN_PX;
     document.documentElement.classList.toggle('kb-open', keyboard);
   };
 
@@ -41,4 +47,7 @@ export function installViewportHeight(): void {
   window.addEventListener('focusout', () => setTimeout(apply, 250));
   // Safari settles its chrome after load; re-measure once it has.
   window.addEventListener('load', () => setTimeout(apply, 120));
+  // The belt-and-braces heal: iOS toolbar collapse can fire NO event at all.
+  // One cheap style write per second keeps the frame honest forever.
+  setInterval(apply, 1000);
 }

@@ -11,9 +11,9 @@ function bootAt(query: string) {
   return render(<App />);
 }
 
-// DsSelect interaction: open the combobox by its accessible name, click an option.
+// Native-picker interaction: tap the field ROW, pick from the list page.
 async function pick(user: ReturnType<typeof userEvent.setup>, label: string, option: string) {
-  await user.click(screen.getByRole('combobox', { name: label }));
+  await user.click(await screen.findByRole('button', { name: new RegExp(`^${label}`) }));
   await user.click(await screen.findByRole('option', { name: option }));
 }
 

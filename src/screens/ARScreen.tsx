@@ -1018,6 +1018,7 @@ export default function ARScreen() {
         open={sheet === 'site'}
         title="Where are you working?"
         onClose={() => setSheet(null)}
+        size="tall"
       >
         <LocationPicker />
       </ArSheet>

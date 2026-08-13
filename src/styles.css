@@ -689,3 +689,87 @@ html.kb-open #root { transform: translateY(var(--vv-top, 0px)); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---- LocationPicker: native field rows + a full-height searchable page ---- */
+.lp { display: flex; flex-direction: column; gap: 8px; min-height: 100%; }
+.lp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--ink-050);
+  font: inherit;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.lp-row:active { background: var(--ink-100); }
+.lp-row-label { font-size: 13px; font-weight: 600; color: var(--text-muted); width: 72px; flex: none; }
+.lp-row-value {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lp-row-chev { color: var(--ink-400); flex: none; }
+
+.lp-page { gap: 10px; height: 100%; }
+.lp-page-head { display: flex; align-items: center; gap: 8px; }
+.lp-page-head h3 { margin: 0; font-size: 17px; font-weight: 600; }
+.lp-back {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--ink-050);
+  color: var(--ink-700);
+  cursor: pointer;
+  padding: 0;
+}
+.lp-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  background: var(--ink-050);
+  color: var(--ink-500);
+  flex: none;
+}
+.lp-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: 400 16px/1.3 var(--font-sans); /* 16px: iOS must not zoom the page */
+  color: var(--text-primary);
+}
+.lp-list { flex: 1; min-height: 200px; display: flex; flex-direction: column; gap: 2px; }
+.lp-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: 500 15px/1.3 var(--font-sans);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.lp-opt:active { background: var(--ink-050); }
+.lp-opt.selected { color: var(--blue-600); }
+.lp-opt-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 describe('keyboard-aware viewport', () => {
-  it('kb-open toggles with the keyboard and --app-h follows the visible area', () => {
+  it('kb-open needs an EDITABLE FOCUS — a bare height gap is stale toolbar data', () => {
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 844 });
     const vv = fakeVisualViewport(844);
     installViewportHeight();
@@ -46,11 +46,24 @@ describe('keyboard-aware viewport', () => {
     expect(root.style.getPropertyValue('--app-h')).toBe('844px');
     expect(root.classList.contains('kb-open')).toBe(false);
 
-    vv.set(508); // keyboard up: 844 - 508 = 336px of keys
+    // a shrunken visual viewport with NOTHING focused = iOS collapsed the
+    // Safari toolbar without telling us — trust the larger measurement, or
+    // the dock floats above a dead band (the shipped bug)
+    vv.set(508);
+    expect(root.style.getPropertyValue('--app-h')).toBe('844px');
+    expect(root.classList.contains('kb-open')).toBe(false);
+
+    // the SAME gap while typing IS the keyboard
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    vv.set(508);
     expect(root.style.getPropertyValue('--app-h')).toBe('508px');
     expect(root.classList.contains('kb-open')).toBe(true);
 
-    vv.set(790); // browser chrome settling is NOT a keyboard
+    input.blur();
+    input.remove();
+    vv.set(790); // chrome settling is NOT a keyboard
     expect(root.classList.contains('kb-open')).toBe(false);
   });
 

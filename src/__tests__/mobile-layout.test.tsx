@@ -103,14 +103,23 @@ describe('select', () => {
     const user = userEvent.setup();
     const { container } = bootAt('?mock=1&tab=surveys');
 
-    // open the scope sheet, then the SITE select inside it
+    // open the scope sheet, then the SITE field row inside it
     await user.click(await screen.findByRole('button', { name: /Working scope/i }));
-    await user.click(await screen.findByRole('combobox', { name: 'Site' }));
+    await user.click(await screen.findByRole('button', { name: /^Site/ }));
 
-    // exactly ONE dialog on screen — the scope sheet. The options are a plain
-    // list in the flow, not a second layer.
+    // exactly ONE dialog on screen — the scope sheet. The options are a
+    // full-height LIST PAGE inside it (search + scroll), never a second
+    // layer, and never an inline expansion that resizes the sheet.
     expect(container.ownerDocument.querySelectorAll('[role="dialog"]')).toHaveLength(1);
-    expect(container.ownerDocument.querySelector('.ds-select-inline')).not.toBeNull();
+    expect(await screen.findByLabelText('Search sites')).toBeInTheDocument();
+    expect(container.ownerDocument.querySelector('.lp-list')).not.toBeNull();
     expect(container.ownerDocument.querySelector('.ds-sheet-panel')).toBeNull();
+
+    // picking returns to the field rows with the value applied
+    await user.click(await screen.findByRole('option', { name: 'Greenfield Business Park' }));
+    await waitFor(() => {
+      const value = container.ownerDocument.querySelector('.lp-row .lp-row-value');
+      expect(value).toHaveTextContent('Greenfield Business Park');
+    });
   });
 });
